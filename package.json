@@ -34,14 +34,14 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/AeroDeploy/warplink-react-native-sdk.git"
+    "url": "https://github.com/WarpLinkApp/warplink-react-native-sdk.git"
   },
-  "author": "AeroDeploy",
+  "author": "WarpLink",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/AeroDeploy/warplink-react-native-sdk/issues"
+    "url": "https://github.com/WarpLinkApp/warplink-react-native-sdk/issues"
   },
-  "homepage": "https://github.com/AeroDeploy/warplink-react-native-sdk#readme",
+  "homepage": "https://github.com/WarpLinkApp/warplink-react-native-sdk#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![npm version](https://img.shields.io/npm/v/@warplink/react-native.svg)](https://www.npmjs.com/package/@warplink/react-native)
-[![CI](https://github.com/AeroDeploy/warplink-react-native-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/AeroDeploy/warplink-react-native-sdk/actions/workflows/ci.yml)
+[![CI](https://github.com/WarpLinkApp/warplink-react-native-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/WarpLinkApp/warplink-react-native-sdk/actions/workflows/ci.yml)
 
 Deep linking SDK for React Native — handle Universal Links and App Links, resolve deferred deep links, and attribute installs with [WarpLink](https://warplink.app).
 

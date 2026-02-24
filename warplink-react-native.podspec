@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.authors      = package["author"]
 
   s.platforms    = { :ios => "15.0" }
-  s.source       = { :git => "https://github.com/AeroDeploy/warplink-react-native-sdk.git", :tag => "v#{s.version}" }
+  s.source       = { :git => "https://github.com/WarpLinkApp/warplink-react-native-sdk.git", :tag => "v#{s.version}" }
 
   s.source_files = "ios/**/*.{h,m,mm,swift}"
   s.swift_version = "5.9"
