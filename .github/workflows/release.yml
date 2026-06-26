@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing git tag to create a GitHub Release for (e.g. v1.0.1). Does NOT re-publish to npm.'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release for the tag
+      id-token: write # mint the OIDC token npm needs for provenance
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      # npm publish only runs for a real tag push. A manual dispatch is
+      # release-only (the version is already on npm and is immutable).
+      - name: Set version from tag
+        if: github.event_name == 'push'
+        run: npm version "${GITHUB_REF_NAME#v}" --allow-same-version --no-git-tag-version
+      - if: github.event_name == 'push'
+        run: npm ci
+      - if: github.event_name == 'push'
+        run: npm run typescript
+      - if: github.event_name == 'push'
+        run: npm run lint
+      - if: github.event_name == 'push'
+        run: npm test
+      - if: github.event_name == 'push'
+        run: npm run build
+      - if: github.event_name == 'push'
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
