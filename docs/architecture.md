@@ -10,7 +10,7 @@ The React Native SDK is a TypeScript bridge layer that delegates to the native i
 TypeScript API (WarpLink.ts)
     → React Native NativeModules bridge (NativeWarpLink.ts)
     → Native module
-        → iOS: WarpLinkModule.swift → WarpLinkSDK (Swift)
+        → iOS: WarpLinkModule.swift → WarpLink (Swift)
         → Android: WarpLinkModule.kt → app.warplink.sdk (Kotlin)
 ```
 
@@ -21,7 +21,7 @@ TypeScript API (WarpLink.ts)
 | Public API | `src/WarpLink.ts` | TypeScript API, input validation, error mapping, event dispatch |
 | Types | `src/types.ts` | All TypeScript interfaces, error class, error codes |
 | Native bridge | `src/NativeWarpLink.ts` | NativeModules interface, linking error detection |
-| iOS native | `ios/WarpLinkModule.swift` | Bridges to WarpLinkSDK, handles UIApplicationDelegate events |
+| iOS native | `ios/WarpLinkModule.swift` | Bridges to WarpLink, handles UIApplicationDelegate events |
 | Android native | `android/.../WarpLinkModule.kt` | Bridges to app.warplink.sdk, handles Activity intents |
 
 ### Key Design Decisions

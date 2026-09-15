@@ -282,7 +282,7 @@ Ensure compatible versions of `@types/react` and `react`:
 {
   "peerDependencies": {
     "react": ">=18.0.0",
-    "react-native": ">=0.71.0"
+    "react-native": ">=0.75.0"
   }
 }
 ```

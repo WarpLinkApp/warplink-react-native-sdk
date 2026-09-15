@@ -1,0 +1,13 @@
+.git
+.github
+docs/
+example/
+.env*
+.eslintrc.js
+jest.config.js
+tsconfig.json
+tsconfig.build.json
+__tests__
+__mocks__
+*.test.ts
+*.test.js

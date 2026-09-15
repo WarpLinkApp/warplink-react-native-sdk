@@ -29,6 +29,12 @@ the current React Native is exercised on a device each release.
 npm install @warplink/react-native
 ```
 
+The iOS SDK is distributed via Swift Package Manager and pulled in automatically by the React Native podspec. SPM integration requires dynamic frameworks, so add this to your `ios/Podfile` inside your app's `target` block:
+
+```ruby
+use_frameworks! :linkage => :dynamic
+```
+
 Then install iOS pods:
 
 ```bash
