@@ -26,8 +26,8 @@ TypeScript API (WarpLink.ts)
 
 ### Key Design Decisions
 
-- **`configure()` is synchronous.** It validates the API key format locally (throwing `WarpLinkError` for invalid format) and delegates to the native SDK via a fire-and-forget async call. This avoids forcing developers to `await` configuration.
-- **All other methods return Promises.** `handleDeepLink()`, `checkDeferredDeepLink()`, `getAttributionResult()`, `isConfigured()`, and `getInitialDeepLink()` bridge to native async operations.
+- **`configure()` returns a `Promise<void>`.** It validates the SDK key format synchronously, reporting a malformed key to `onLink` as an `{ error }` event with `E_INVALID_API_KEY_FORMAT` rather than throwing, then the returned promise resolves once native configuration completes, including the automatic cold-start and deferred dispatch. A native configuration failure is delivered to `onLink` as an `{ error }` event when `onLink` is provided, or rejects the promise when it is not.
+- **All bridged methods return Promises.** `handleDeepLink()`, `checkDeferredDeepLink()`, `getAttributionResult()`, `isConfigured()`, and `getInitialDeepLink()` bridge to native async operations.
 - **Error mapping in TypeScript.** Native errors are caught and mapped to `WarpLinkError` instances with typed error codes via `mapNativeError()`. This provides a consistent error interface across platforms.
 - **Deserialization in TypeScript.** Raw objects from the native bridge are deserialized into typed `WarpLinkDeepLink` and `AttributionResult` objects via `deserializeDeepLink()` and `deserializeAttributionResult()`.
 
@@ -64,6 +64,11 @@ User taps link
 
 ## Deep Link Event Flow
 
+In the opt-out model (`configure({ apiKey, onLink })`), the TypeScript layer wires
+the three flows below into your single `onLink` callback automatically. The
+sequences below show what happens under the hood; you can still drive each stage
+manually by disabling the corresponding `automatic*` flag.
+
 When the native OS delivers a deep link to the app:
 
 ### Cold Start (App Not Running)
@@ -86,15 +91,14 @@ User taps WarpLink URL → OS launches app
 
 ```
 User taps WarpLink URL → OS brings app to foreground
-    → iOS: application(_:continue:) fires
-    → Android: onNewIntent() fires
+    → iOS: AppDelegate calls WarpLinkModule.handleIncomingURL(url)
+    → Android: onNewIntent() fires (requires launchMode="singleTask")
     → Native module emits 'onWarpLinkDeepLink' event with URL
     → NativeEventEmitter delivers event to TypeScript
-    → WarpLink.ts handleNativeDeepLinkEvent(event)
-    → resolveAndDispatch(url) calls NativeWarpLink.handleDeepLink(url)
+    → WarpLink.ts resolves the URL via NativeWarpLink.handleDeepLink(url)
     → Native SDK resolves the link via API
     → TypeScript deserializes result → WarpLinkDeepLink
-    → Dispatches to all registered listeners
+    → Dispatches to onLink (and any manual onDeepLink listeners), deduped by URL
     → App navigates to content
 ```
 
@@ -118,22 +122,22 @@ When a user clicks a link before the app is installed:
 
 ```
 User taps link (app not installed)
-    → Edge captures browser signals (IP, UA, language, screen, timezone)
+    → Edge captures request signals (IP, preferred language, timezone)
     → Stores signals as a deferred payload (keyed by fingerprint)
     → Redirects user to App Store / Play Store
 
 User installs and opens the app
-    → App calls WarpLink.checkDeferredDeepLink()
+    → configure({ onLink }) auto-fires the deferred check (or you call it manually)
     → TypeScript calls NativeWarpLink.checkDeferredDeepLink()
-    → Native SDK detects first launch (UserDefaults / SharedPreferences)
+    → Native SDK detects the first launch of this install (a backup-excluded file on iOS, the no-backup directory on Android)
     → Native SDK collects device signals
-        → iOS: screen size, timezone, language, IDFV
-        → Android: screen size, timezone, language, Play Install Referrer
+        → iOS: preferred language, timezone (IANA name and offset), IDFV, reinstall flag, bundle id
+        → Android: preferred language, timezone (IANA name and offset), Play Install Referrer, reinstall flag, package name
     → Native SDK calls POST /attribution/match with device signals
     → Server compares device signals against stored click signals
         → IDFV match? → deterministic (confidence 1.0)
         → Play Install Referrer match? → deterministic (confidence 1.0)
-        → Fingerprint match? → probabilistic (confidence 0.40–0.85)
+        → Fingerprint match? → probabilistic (confidence 0.20 to 0.85 before multipliers)
     → Native SDK caches result
     → TypeScript deserializes result → WarpLinkDeepLink (isDeferred: true)
     → App navigates to content
@@ -143,12 +147,30 @@ User installs and opens the app
 
 ### First Launch Detection
 
-The native SDK tracks whether the app has been launched before:
+The native SDK tracks whether the deferred check has completed for **this
+install**. The marker is split into "attempted" and "completed" and is consumed
+**only** on a definitive server response, so an offline first launch retries on
+the next launch. It is stored where an uninstall and a restore-from-backup both
+clear it:
 
-- **iOS:** `UserDefaults.standard.bool(forKey: "warplink_first_launch_done")`
-- **Android:** `SharedPreferences.getBoolean("warplink_first_launch_done", false)`
+- **iOS:** a file marked as excluded from backup (not UserDefaults, which iCloud
+  and iTunes backups do carry)
+- **Android:** backup-excluded storage, `noBackupFilesDir`, which Auto Backup
+  never restores
 
-On the very first launch, `checkDeferredDeepLink()` performs the attribution request. On all subsequent launches, it returns `null` (cached result, no network request).
+That scoping is the point: a reinstall counts as an install, so the check has to
+run again. A marker that outlived the install would silently skip attribution for
+every reinstall on that device.
+
+Telling a reinstall apart is a **second, separate marker**, and it gates nothing.
+It survives an uninstall and a restore on purpose (Keychain on iOS, a backed-up
+shared preference on Android) and only tags the attribution request.
+One marker serving both jobs is what made iOS and Android disagree before.
+
+On the first launch of an install, the deferred check performs the attribution
+request. Once it completes, subsequent launches of that same install return the
+cached result with no network request: the same match if one was found, `null` if
+there was none.
 
 ### Deferred Deep Link Result
 
@@ -158,9 +180,9 @@ After the first attribution check, the result (match or no match) is cached by t
 - Subsequent calls to `checkDeferredDeepLink()` return instantly from cache
 - No unnecessary network requests on subsequent app launches
 
-### API Key Validation
+### SDK Key Validation
 
-The native SDK caches a successful API key validation for 24 hours:
+The native SDK caches a successful SDK key validation for 24 hours:
 
 - First `configure()` call triggers async server validation via `/sdk/validate`
 - Successful validation stored in UserDefaults / SharedPreferences with timestamp
@@ -172,7 +194,7 @@ The native SDK caches a successful API key validation for 24 hours:
 - **JavaScript callbacks** are delivered on the React Native bridge thread
 - **NativeEventEmitter** events are delivered on the React Native event loop
 - **`configure()`** can be called from any thread but should be called once during initialization
-- **Multiple listeners** are safe — the `Set<DeepLinkListener>` and event subscription are managed in module-level state
+- **Multiple sinks** are safe — the auto-wired `onLink` and any manual `onDeepLink` listeners share a single native event subscription managed in module-level state
 
 ## Zero Dependencies Philosophy
 
@@ -181,7 +203,9 @@ The SDK has **no third-party runtime dependencies**:
 - **TypeScript layer:** Only imports from `react-native` (peer dependency)
 - **iOS native:** Built on Apple frameworks (Foundation, UIKit)
 - **Android native:** Built on Android SDK + Kotlin stdlib
-- **Peer dependencies:** `react >= 18.0.0` and `react-native >= 0.71.0`
+- **Peer dependencies:** `react >= 18.0.0` and `react-native >= 0.75.0`, which
+  spans both React Native architectures: the classic one through 0.81 and the
+  New Architecture from 0.82, where it is the only one
 
 This minimizes bundle size, avoids supply chain risks, and eliminates version conflicts.
 

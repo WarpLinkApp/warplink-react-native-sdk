@@ -17,20 +17,42 @@ import WarpLink from '@warplink/react-native';
 #### `configure(options)`
 
 ```typescript
-configure(options: WarpLinkConfig): void
+configure(options: WarpLinkConfig): Promise<void>
 ```
 
-Configure the SDK with your API key. Must be called before any other SDK methods.
+Configure the SDK with your SDK key. Must be called before any other SDK methods.
+
+Pass an `onLink` callback to enable the **opt-out model**: cold-start, warm-start,
+and deferred deep links are auto-wired and funneled into that one callback. Each
+source is independently disable-able via `automaticDeepLinks` /
+`automaticDeferredDeepLinks`.
 
 **Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `options` | `WarpLinkConfig` | Configuration object with API key and optional settings. |
+| `options` | `WarpLinkConfig` | Configuration object with your SDK key, `onLink`, and optional settings. |
 
 **Behavior:**
-- **Synchronous.** Validates the API key format locally. Delegates to the native SDK for async server-side validation.
-- Throws `WarpLinkError` with code `E_INVALID_API_KEY_FORMAT` if the key format is invalid.
+- Returns a `Promise<void>` that resolves once native configuration (and any
+  automatic cold-start + deferred dispatch) completes.
+- The SDK key **format** is validated **synchronously**, but a malformed key
+  does **not** throw. It logs a warning, is reported to `onLink` as an
+  `{ error }` event with code `E_INVALID_API_KEY_FORMAT`, and leaves the SDK
+  unconfigured. iOS and Android behave the same way.
+- A native/server configuration failure is delivered to `onLink` as an
+  `{ error }` event when `onLink` is provided; otherwise the returned promise
+  rejects with a mapped `WarpLinkError`.
+- Cold-start and warm-start auto-wiring only activates when `onLink` is
+  provided. The deferred check is the exception: it is the install attribution
+  request, so it fires with or without `onLink` unless
+  `automaticDeferredDeepLinks` is `false`. A light internal dedupe
+  ensures the same source URL is never dispatched twice (e.g. via both cold start
+  and a warm-start event).
+- Reconfiguring tears down prior auto-wiring first (idempotent).
+- `linkDomains` is forwarded to the native layer untouched. Normalization
+  (trim, lowercase, full URL reduced to its host) happens natively, so the same
+  rules apply to domains declared in `Info.plist` or the Android manifest.
 - Call once at app startup, outside of any React component.
 
 **Example:**
@@ -38,16 +60,22 @@ Configure the SDK with your API key. Must be called before any other SDK methods
 ```tsx
 import { WarpLink } from '@warplink/react-native';
 
-// Basic configuration
+// Opt-out model — one call wires everything.
 WarpLink.configure({
-  apiKey: 'wl_live_abcdefghijklmnopqrstuvwxyz012345',
+  apiKey: 'wl_live_yoursdkkeyhere000000000000000000',
+  onLink: ({ deepLink, error }) => {
+    if (deepLink) navigate(deepLink.deepLinkUrl ?? deepLink.destination);
+    else if (error) console.error(error.code, error.message);
+  },
 });
 
-// With options
+// Disable individual pieces to wire them manually.
 WarpLink.configure({
-  apiKey: 'wl_live_abcdefghijklmnopqrstuvwxyz012345',
+  apiKey: 'wl_live_yoursdkkeyhere000000000000000000',
+  onLink: handleLink,
   debugLogging: true,
-  matchWindowHours: 48,
+  automaticDeepLinks: false,
+  automaticDeferredDeepLinks: false,
 });
 ```
 
@@ -76,9 +104,10 @@ Resolve a deep link URL to its link data. Call this when you receive a URL from 
 | `E_NOT_CONFIGURED` | SDK not configured yet |
 | `E_INVALID_URL` | URL is not a recognized WarpLink domain |
 | `E_LINK_NOT_FOUND` | Link does not exist or is inactive |
+| `E_PASSWORD_REQUIRED` | Link is password protected, so it resolves to nothing |
 | `E_NETWORK_ERROR` | Network request failed |
 | `E_SERVER_ERROR` | API returned a 5xx error |
-| `E_INVALID_API_KEY` | API key rejected by server |
+| `E_INVALID_API_KEY` | Key rejected by server |
 | `E_DECODING_ERROR` | Response parsing failed |
 
 **Example:**
@@ -108,14 +137,15 @@ try {
 checkDeferredDeepLink(): Promise<WarpLinkDeepLink | null>
 ```
 
-Check for a deferred deep link on first launch. Returns `null` if no match was found or if this is not the first launch.
+Check for a deferred deep link on first launch. Returns `null` if no match was found. Once the check has completed, later calls return the same cached result instead of running it again.
 
 **Returns:** `Promise<WarpLinkDeepLink | null>` — the matched deep link with `isDeferred: true`, or `null`.
 
 **Behavior:**
-- On first launch: collects device signals, sends them to the attribution API, and returns the match result.
-- On subsequent launches: returns `null` (cached result) without a network request.
-- The matched deep link has `isDeferred: true` and includes `matchType` and `matchConfidence`.
+- On the first launch of an install: collects device signals, sends them to the attribution API, and returns the match result.
+- On subsequent launches of that same install: returns the cached result without a network request, which is the match found on the first launch, or `null` if there was none.
+- After a reinstall: the check runs again, on both platforms. A reinstall counts as an install and is attributed again.
+- The matched deep link has `isDeferred: true` and includes `matchType`, `matchConfidence`, and `matchGuaranteed`.
 
 **Errors:**
 
@@ -124,7 +154,7 @@ Check for a deferred deep link on first launch. Returns `null` if no match was f
 | `E_NOT_CONFIGURED` | SDK not configured yet |
 | `E_NETWORK_ERROR` | Network request failed |
 | `E_SERVER_ERROR` | API returned a 5xx error |
-| `E_INVALID_API_KEY` | API key rejected by server |
+| `E_INVALID_API_KEY` | Key rejected by server |
 | `E_DECODING_ERROR` | Response parsing failed |
 
 **Example:**
@@ -133,6 +163,10 @@ Check for a deferred deep link on first launch. Returns `null` if no match was f
 const link = await WarpLink.checkDeferredDeepLink();
 if (link?.isDeferred) {
   const confidence = link.matchConfidence ?? 0;
+  if (link.matchGuaranteed) {
+    // Deterministic match: safe to restore identity, not just content
+    restoreAccount(link);
+  }
   if (confidence > 0.5) {
     // High confidence — route to specific content
     navigateTo(link.deepLinkUrl ?? link.destination);
@@ -153,7 +187,12 @@ getAttributionResult(): Promise<AttributionResult | null>
 
 Get install attribution data for the current app install. Returns the attribution match including the link that drove the install.
 
-**Returns:** `Promise<AttributionResult | null>` — attribution data, or `null` if no attribution match was found or the data was incomplete.
+**Returns:** `Promise<AttributionResult | null>` — attribution data, or `null` for a genuine no-match (organic install).
+
+**Behavior:**
+- Returns `null` when the native module reports no attribution (organic install).
+- Throws `E_DECODING_ERROR` when a non-null but malformed payload is returned —
+  so a decode failure is distinguishable from a genuine no-match.
 
 **Errors:**
 
@@ -162,8 +201,8 @@ Get install attribution data for the current app install. Returns the attributio
 | `E_NOT_CONFIGURED` | SDK not configured yet |
 | `E_NETWORK_ERROR` | Network request failed |
 | `E_SERVER_ERROR` | API returned a 5xx error |
-| `E_INVALID_API_KEY` | API key rejected by server |
-| `E_DECODING_ERROR` | Response parsing failed |
+| `E_INVALID_API_KEY` | Key rejected by server |
+| `E_DECODING_ERROR` | Non-null response could not be decoded |
 
 **Example:**
 
@@ -173,6 +212,7 @@ if (attribution) {
   console.log('Matched link:', attribution.linkId);
   console.log('Match type:', attribution.matchType); // 'deterministic' or 'probabilistic'
   console.log('Confidence:', attribution.matchConfidence);
+  console.log('Guaranteed:', attribution.matchGuaranteed); // true only when deterministic
   console.log('Is deferred:', attribution.isDeferred);
 }
 ```
@@ -268,6 +308,7 @@ Get the deep link that launched the app (cold start). Returns `null` if the app 
 | `E_NOT_CONFIGURED` | SDK not configured yet |
 | `E_INVALID_URL` | URL is not a recognized WarpLink domain |
 | `E_LINK_NOT_FOUND` | Link does not exist or is inactive |
+| `E_PASSWORD_REQUIRED` | Link is password protected, so it resolves to nothing |
 | `E_NETWORK_ERROR` | Network request failed |
 | `E_SERVER_ERROR` | API returned a 5xx error |
 | `E_DECODING_ERROR` | Response parsing failed |
@@ -299,15 +340,68 @@ interface WarpLinkConfig {
   apiEndpoint?: string;
   debugLogging?: boolean;
   matchWindowHours?: number;
+  linkDomains?: string[];
+  onLink?: DeepLinkListener;
+  automaticDeepLinks?: boolean;
+  automaticDeferredDeepLinks?: boolean;
 }
 ```
 
 | Property | Type | Required | Default | Description |
 |----------|------|----------|---------|-------------|
-| `apiKey` | `string` | Yes | — | Your WarpLink API key. Must match `wl_live_` or `wl_test_` + 32 alphanumeric characters. |
+| `apiKey` | `string` | Yes | | Your WarpLink **SDK key**, created under **API Keys** > **SDK key** in the dashboard. Must match `wl_live_` or `wl_test_` + 32 alphanumeric characters. An API key satisfies the format check but cannot record installs. |
+| `onLink` | `DeepLinkListener` | No | | Single sink for cold-start, warm-start, AND deferred deep links. Providing it enables the opt-out auto-wiring. Disambiguate deferred results via `deepLink.isDeferred`. Native config failures arrive here as `{ error }`. |
+| `automaticDeepLinks` | `boolean` | No | `true` | Auto-handle cold + warm start through `onLink`. Only applies when `onLink` is set. |
+| `automaticDeferredDeepLinks` | `boolean` | No | `true` | Auto-fire the deferred check from `configure()` and deliver through `onLink`. The check itself runs with or without `onLink`, because it is the install attribution request; `onLink` only decides whether the match is handed back to you. |
 | `apiEndpoint` | `string` | No | `"https://api.warplink.app/v1"` | The API endpoint URL. Override for testing or custom deployments. |
 | `debugLogging` | `boolean` | No | `false` | Enable debug logging in the native console. |
-| `matchWindowHours` | `number` | No | `72` | The match window in hours for deferred deep link attribution. |
+| `linkDomains` | `string[]` | No | `[]` | Extra hosts that serve your links, on top of `aplnk.to`. Declare your verified custom domain here so links on it resolve on the very first launch and on offline launches. Additive: merged with the domains the SDK fetches. Full URLs are accepted and reduced to their host. See [Custom link domains](#custom-link-domains). |
+| `matchWindowHours` | `number` | No | | **Server-side only / deprecated.** The effective match window is set per link in the dashboard (6 hours by default, 24 at most). Accepted for backward compatibility but has no client-side effect. |
+
+#### Custom link domains
+
+The SDK always recognizes `aplnk.to`. It also fetches your organization's
+verified custom domains and caches them, but that answer arrives over the
+network, and "is this URL mine?" has to be answered the instant a link opens
+your app. On a genuinely first launch, or any launch that starts offline, the
+fetched list is not there yet and a custom-domain link is handed back to your
+app unresolved.
+
+Declaring the domain locally closes that gap. Three places work, and all of them
+are merged with each other and with the fetched list:
+
+```tsx
+WarpLink.configure({
+  apiKey: 'wl_live_yoursdkkeyhere000000000000000000',
+  linkDomains: ['links.yourapp.com'],
+  onLink: handleLink,
+});
+```
+
+```xml
+<!-- iOS: ios/YourApp/Info.plist -->
+<key>WarpLinkDomains</key>
+<array>
+  <string>links.yourapp.com</string>
+</array>
+```
+
+```xml
+<!-- Android: android/app/src/main/AndroidManifest.xml, inside <application> -->
+<meta-data
+    android:name="app.warplink.DOMAINS"
+    android:value="links.yourapp.com,go.yourapp.com" />
+```
+
+The native declarations suit an app whose links can arrive before the
+JavaScript bundle has run. Entries are trimmed, lowercased, and reduced to their
+host, so `https://Links.YourApp.com/` and `links.yourapp.com` mean the same
+thing. `www.` is a different host and is never stripped.
+
+Declaring a domain does not by itself make the operating system open your app
+for it. The domain still has to be verified and live in the dashboard, listed in
+your iOS Associated Domains entitlement (`applinks:links.yourapp.com`), and
+declared in your Android intent filter.
 
 ---
 
@@ -324,6 +418,7 @@ interface WarpLinkDeepLink {
   isDeferred: boolean;
   matchType: 'deterministic' | 'probabilistic' | null;
   matchConfidence: number | null;
+  matchGuaranteed: boolean;
 }
 ```
 
@@ -336,6 +431,7 @@ interface WarpLinkDeepLink {
 | `isDeferred` | `boolean` | Whether this deep link was resolved via deferred attribution. |
 | `matchType` | `'deterministic' \| 'probabilistic' \| null` | The type of attribution match. `null` for direct links. |
 | `matchConfidence` | `number \| null` | The confidence score (0.0 to 1.0). `null` for direct links. |
+| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Gate anything sensitive (auto sign-in, showing personal data) on this rather than on a confidence threshold: a probabilistic match is a best guess from a network-shaped fingerprint and can name the wrong user. |
 
 **Working with `customParams`:**
 
@@ -361,8 +457,8 @@ interface AttributionResult {
   linkId: string;
   matchType: 'deterministic' | 'probabilistic';
   matchConfidence: number;
+  matchGuaranteed: boolean;
   isDeferred: boolean;
-  installId: string | null;
 }
 ```
 
@@ -371,8 +467,11 @@ interface AttributionResult {
 | `linkId` | `string` | The ID of the link that drove the install. |
 | `matchType` | `'deterministic' \| 'probabilistic'` | The type of attribution match. Always present (unlike `WarpLinkDeepLink` where it's nullable). |
 | `matchConfidence` | `number` | Confidence score (0.0 to 1.0). Always present. |
+| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Gate anything sensitive (auto sign-in, showing personal data) on this rather than on a confidence threshold: a probabilistic match is a best guess from a network-shaped fingerprint and can name the wrong user. |
 | `isDeferred` | `boolean` | Whether this attribution was from a deferred deep link. |
-| `installId` | `string \| null` | The install identifier, if available. |
+
+> **Removed in 1.1.0:** the `installId` field. The native serializers never
+> emitted it, so it was always `null`.
 
 ---
 
@@ -475,6 +574,7 @@ const ErrorCodes = {
   E_SERVER_ERROR: 'E_SERVER_ERROR',
   E_INVALID_URL: 'E_INVALID_URL',
   E_LINK_NOT_FOUND: 'E_LINK_NOT_FOUND',
+  E_PASSWORD_REQUIRED: 'E_PASSWORD_REQUIRED',
   E_DECODING_ERROR: 'E_DECODING_ERROR',
 } as const;
 ```
@@ -482,12 +582,13 @@ const ErrorCodes = {
 | Code | Description |
 |------|-------------|
 | `E_NOT_CONFIGURED` | SDK not initialized — call `configure()` first. |
-| `E_INVALID_API_KEY_FORMAT` | API key doesn't match `wl_(live\|test)_[a-zA-Z0-9]{32}`. |
-| `E_INVALID_API_KEY` | API key rejected by server (revoked or incorrect). |
+| `E_INVALID_API_KEY_FORMAT` | Key doesn't match `wl_(live\|test)_[a-zA-Z0-9]{32}`. |
+| `E_INVALID_API_KEY` | Key rejected by server (revoked, incorrect, or an API key instead of an SDK key). |
 | `E_NETWORK_ERROR` | Network unreachable or request timed out. |
 | `E_SERVER_ERROR` | Server returned a 5xx error. |
 | `E_INVALID_URL` | URL is not a recognized WarpLink domain. |
 | `E_LINK_NOT_FOUND` | Link slug doesn't exist or is inactive (404). |
+| `E_PASSWORD_REQUIRED` | Link is password protected (403), so it resolves to no destination and no platform URLs. |
 | `E_DECODING_ERROR` | Malformed or unexpected server response. |
 
 See [Error Handling](error-handling.md) for recommended recovery actions for each code.

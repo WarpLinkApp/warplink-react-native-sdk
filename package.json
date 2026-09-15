@@ -1,6 +1,6 @@
 {
   "name": "@warplink/react-native",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "WarpLink deep linking SDK for React Native",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",

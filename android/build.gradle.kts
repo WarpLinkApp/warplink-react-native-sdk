@@ -36,7 +36,7 @@ dependencies {
     implementation("com.facebook.react:react-native:+")
 
     // WarpLink Android SDK — published release
-    implementation("app.warplink:sdk:1.0.0")
+    implementation("app.warplink:sdk:1.1.0")
     // For local development, use project reference instead:
     // implementation(project(":warplink-android-sdk:sdk"))
 }

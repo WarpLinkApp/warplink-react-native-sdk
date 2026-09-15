@@ -25,6 +25,21 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
+      # Consequence, by design: re-running this workflow via workflow_dispatch
+      # for a historical tag now fails, because the pins on that commit do not
+      # match it. v1.0.0, v1.0.1 and v1.0.2 all pinned app.warplink:sdk:1.0.0
+      # while npm said 1.0.x, which is the defect this step exists to stop. A
+      # refusal here is the guard working, not a broken workflow.
+      - name: Refuse a tag the native pins do not match
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          ANDROID="$(sed -n 's/.*implementation("app\.warplink:sdk:\([^"]*\)").*/\1/p' android/build.gradle.kts)"
+          IOS="$(sed -n 's/.*minimumVersion: *"\([^"]*\)".*/\1/p' warplink-react-native.podspec)"
+          test -n "$ANDROID" || { echo "app.warplink:sdk pin not found in android/build.gradle.kts"; exit 1; }
+          test -n "$IOS" || { echo "minimumVersion not found in warplink-react-native.podspec"; exit 1; }
+          test "v$ANDROID" = "$TAG" || { echo "android/build.gradle.kts pins app.warplink:sdk:$ANDROID but the tag is $TAG"; exit 1; }
+          test "v$IOS" = "$TAG" || { echo "podspec floors the iOS package at $IOS but the tag is $TAG"; exit 1; }
       # npm publish only runs for a real tag push. A manual dispatch is
       # release-only (the version is already on npm and is immutable).
       - name: Set version from tag

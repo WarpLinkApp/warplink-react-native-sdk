@@ -27,7 +27,7 @@ React Native CLI auto-linking should handle this automatically. If it fails:
    npx react-native start --reset-cache
    ```
 
-2. For older React Native versions (< 0.71), you may need manual linking. See the [React Native docs on manual linking](https://reactnative.dev/docs/linking-libraries-ios).
+2. For older React Native versions (< 0.75), you may need manual linking. See the [React Native docs on manual linking](https://reactnative.dev/docs/linking-libraries-ios).
 
 ### Rebuild required
 
@@ -85,7 +85,31 @@ pod install --project-directory=packages/mobile/ios
 
 ## 3. Universal Links Not Working (iOS)
 
-**Symptoms:** Tapping a WarpLink URL opens Safari instead of your app.
+**Symptoms:** Tapping a WarpLink URL opens Safari instead of your app, or the app
+opens but `onLink` / your deep link handler never fires.
+
+### Missing the AppDelegate host hook (most common)
+
+If the app opens but no deep link is delivered, the `AppDelegate` is almost
+certainly not forwarding the URL to WarpLink. React Native does **not** do this
+automatically. Your `AppDelegate` must call `WarpLinkModule.handleIncomingURL(url)`
+from `application(_:continue:restorationHandler:)` (Universal Links) and, if you
+use custom schemes, `application(_:open:options:)`. See the
+[iOS host hook](integration-guide.md#ios-host-hook) in the Integration Guide.
+**iOS deep links are 100% broken without this.**
+
+### App declares a UIApplicationSceneManifest (also common)
+
+If the `AppDelegate` hook above is present and the app still never delivers a
+link, check `Info.plist` for `UIApplicationSceneManifest`. Once a scene
+manifest exists, iOS stops calling the `AppDelegate` hook entirely and routes
+delivery to `SceneDelegate` instead: the method stays in the app, but never
+runs again, and nothing errors, so this is easy to miss. Add the same
+`WarpLinkModule.handleIncomingURL(url)` call to `SceneDelegate`'s
+`scene(_:willConnectTo:options:)`, `scene(_:continue:)`, and
+`scene(_:openURLContexts:)`. See the
+[iOS SceneDelegate hook](integration-guide.md#ios-scenedelegate-hook) in the
+Integration Guide.
 
 ### Check Associated Domains entitlement
 
@@ -93,7 +117,7 @@ Verify `applinks:aplnk.to` is added in your Xcode target under **Signing & Capab
 
 ### AASA not configured
 
-Your iOS app must be registered in the WarpLink dashboard (**Settings > Apps**) with the correct bundle ID and team ID. Verify the AASA file:
+Your iOS app must be registered in the WarpLink dashboard (**Apps**) with the correct bundle ID and team ID. Verify the AASA file:
 
 ```bash
 curl -s https://aplnk.to/.well-known/apple-app-site-association | python3 -m json.tool
@@ -111,13 +135,23 @@ Verify that the **Associated Domains** capability is enabled for your App ID in 
 
 ### Domain mismatch
 
-The SDK only recognizes `aplnk.to` as a WarpLink domain. URLs with other hosts will return `E_INVALID_URL`.
+The SDK recognizes `aplnk.to` plus your org's verified custom domains, which it fetches when the SDK is configured and caches for offline launches. A URL on a host that isn't in that set returns `E_INVALID_URL`. If you're testing a custom domain, confirm it is verified and live in the dashboard, and that the custom domain is also listed in your **Associated Domains** entitlement (`applinks:go.yourbrand.com`), or iOS won't open your app for it in the first place.
+
+If it only fails on the first launch after install, or with no network, the fetch had not completed when the link arrived. Declare the domain locally and it is recognized immediately: `linkDomains: ['go.yourbrand.com']` in `configure()`, a `WarpLinkDomains` array in `Info.plist`, or an `app.warplink.DOMAINS` manifest entry on Android. See [Custom link domains](api-reference.md#custom-link-domains).
 
 ---
 
 ## 4. App Links Not Verified (Android)
 
 **Symptoms:** Tapping a WarpLink URL shows a disambiguation dialog instead of opening your app directly.
+
+### Warm-start links lost (missing launchMode)
+
+If cold-start links work but tapping a link while the app is already running does
+nothing, your launch Activity is missing `android:launchMode="singleTask"`. Without
+it, Android starts a new Activity instead of delivering the intent to the running
+app via `onNewIntent`, so the SDK never sees the warm-start URL. See
+[Android setup](integration-guide.md#android-launchmode).
 
 ### Check assetlinks.json
 
@@ -179,7 +213,7 @@ The SDK makes a network request to resolve the link. Check device connectivity. 
 
 ```tsx
 WarpLink.configure({
-  apiKey: 'wl_live_...',
+  apiKey: 'wl_live_yoursdkkeyhere000000000000000000',
   debugLogging: true,
 });
 ```
@@ -196,18 +230,17 @@ The link may have been deleted or deactivated. Verify it exists in the WarpLink 
 
 ## 6. Deferred Deep Link Returns `null`
 
-**Symptoms:** `checkDeferredDeepLink()` returns `null` when you expect a match.
+**Symptoms:** `checkDeferredDeepLink()` returns `null` when you expect a match, or deep links resolve fine but no installs appear in your dashboard.
+
+### Wrong key type (most common)
+
+Install attribution requires an **SDK key**. An API key cannot record installs, whatever scopes it holds, so the attribution request is rejected and no match comes back. Deep links keep resolving normally, which is what makes this one hard to spot.
+
+Create an SDK key at **API Keys** > **SDK key** in the dashboard and pass it to `WarpLink.configure()`. Both credentials use the `wl_live_` prefix followed by 32 alphanumeric characters, so check the key type in the dashboard rather than reading the string.
 
 ### Match window expired
 
-The default match window is 72 hours. If the user installs the app after the window expires, no match will be found. Adjust the window if needed:
-
-```tsx
-WarpLink.configure({
-  apiKey: 'wl_live_...',
-  matchWindowHours: 168, // 7 days
-});
-```
+The default match window is 6 hours, and the ceiling is 24 hours. If the user installs the app after the window expires, no match will be found. The match window is server-authoritative: configure it per link in the WarpLink dashboard (the `matchWindowHours` option on `configure()` is accepted for backward compatibility but has no client-side effect).
 
 ### Fingerprint mismatch
 
@@ -215,17 +248,25 @@ The user's network conditions may have changed between clicking the link and ins
 
 ### Not first launch
 
-The deferred deep link check only runs on first launch. If the first-launch flag was already consumed (previous install, persisted UserDefaults on iOS), the check returns `null`.
+The deferred deep link check runs once per install. If the gate was already consumed on a definitive server response, the check does not run again for that install: it returns the cached result from that completed check, which is `null` when the completed check found no match.
+
+The gate is scoped to one install on both platforms, so deleting the app and installing it again always retests. A reinstall counts as an install and is attributed again.
 
 To test deferred deep links:
-1. Delete the app from the device
+1. Uninstall the app (iOS and Android both work; erasing the simulator also works)
 2. Click a WarpLink URL in the browser
 3. Install the app (via Xcode, Android Studio, or build tools)
-4. Launch the app — `checkDeferredDeepLink()` should return the match
+4. Launch the app. `checkDeferredDeepLink()` should return the match
 
-### SharedPreferences / UserDefaults cleared
+If the check still does not run after a reinstall, the device most likely restored from a backup that carried the gate. That is a bug: file it. The gate is deliberately stored where neither an uninstall nor a restore can bring it back.
 
-On Android, SharedPreferences are tied to the app install. On iOS, UserDefaults may persist across reinstalls depending on iCloud backup settings.
+### Marker storage
+
+Each native SDK keeps two separate markers, and neither is readable from JavaScript.
+
+The **gate** answers "has attribution already completed for this install?". On Android it lives in backup-excluded storage (`noBackupFilesDir`); on iOS it is a file marked as excluded from backup. Neither survives an uninstall, and neither is restored from an iCloud or iTunes backup, so a reinstall always runs a fresh check.
+
+The **device-seen marker** answers "has this device ever completed attribution?". On iOS it is a Keychain entry; on Android it is a backed-up shared preference. It survives an uninstall and a restore by design, and it gates nothing. Its only job is to tag the attribution request, so a reinstall can be counted separately from a genuine first install.
 
 ---
 
@@ -276,7 +317,7 @@ const productId = link.customParams['product_id'] as string | undefined;
 
 ```tsx
 WarpLink.configure({
-  apiKey: 'wl_live_abcdefghijklmnopqrstuvwxyz012345',
+  apiKey: 'wl_live_yoursdkkeyhere000000000000000000',
   debugLogging: true,
 });
 ```
@@ -284,10 +325,10 @@ WarpLink.configure({
 ### iOS — Xcode Console
 
 Look for `[WarpLink]` prefixed messages in the Xcode console. Key messages:
-- `"Configured with API key: wl_live_****xxxx"` — SDK initialized
-- `"First launch — collecting device signals for attribution"` — attribution check started
-- `"Deferred deep link matched: <linkId>"` — match found
-- `"No deferred deep link match"` — no match found
+- `"Configured with API key: wl_live_****xxxx"`: SDK initialized
+- `"First launch: collecting device signals for attribution"`: attribution check started
+- `"Deferred deep link matched: <linkId>"`: match found
+- `"No deferred deep link match"`: no match found
 
 ### Android — Logcat
 
@@ -307,12 +348,18 @@ Native debug log messages from both platforms are bridged to the React Native co
 
 **Symptoms:** Concerns about compatibility with the New Architecture.
 
-The SDK uses the **old architecture** bridge (`NativeModules`). However, React Native provides an interop layer that makes old-architecture native modules work with the New Architecture.
+The SDK is written against the classic native module API (`NativeModules` and
+`NativeEventEmitter`). React Native's interop layer runs those modules under the
+New Architecture, so no host setup differs between the two.
 
 **Current status:**
-- The SDK works with both old and new architecture via the interop layer
-- Native TurboModules support is planned for a future release
-- No action needed from developers — the interop layer handles it automatically
+- The New Architecture is the only architecture from React Native 0.82 onward,
+  and the SDK supports it. Cold start, warm start, deferred delivery and every
+  error path are exercised on a device on the current React Native each release.
+- The classic architecture, React Native 0.75 to 0.81, is still supported. The
+  Android bridge is compiled against both ends of the range on every check.
+- No action needed from developers. There is no flag to set and no separate
+  build.
 
 If you encounter issues specific to the New Architecture, enable debug logging and file an issue on [GitHub](https://github.com/WarpLinkApp/warplink-react-native-sdk/issues).
 

@@ -43,7 +43,7 @@ Recreate your Firebase Dynamic Links as WarpLink links via the [dashboard](https
 
 ```bash
 curl -X POST https://api.warplink.app/v1/links \
-  -H "Authorization: Bearer wl_live_abcdefghijklmnopqrstuvwxyz012345" \
+  -H "Authorization: Bearer wl_live_YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "destination_url": "https://yourapp.com/product/123",
@@ -111,9 +111,11 @@ import { WarpLink } from '@warplink/react-native';
 
 // Call once at app startup, outside any component
 WarpLink.configure({
-  apiKey: 'wl_live_abcdefghijklmnopqrstuvwxyz012345',
+  apiKey: 'wl_live_yoursdkkeyhere000000000000000000',
 });
 ```
+
+`apiKey` takes an **SDK key**, created under **API Keys** > **SDK key** in the dashboard. It is pre-scoped for link resolution and install attribution. API keys are a separate credential for backend scripts and CI, and they cannot record installs.
 
 ## Step 4: Migrate Deep Link Handling
 
@@ -271,7 +273,7 @@ For large numbers of links, use the WarpLink REST API to bulk create:
 # Create links in batch via the API
 for url in "${urls[@]}"; do
   curl -X POST https://api.warplink.app/v1/links \
-    -H "Authorization: Bearer wl_live_abcdefghijklmnopqrstuvwxyz012345" \
+    -H "Authorization: Bearer wl_live_YOUR_API_KEY" \
     -H "Content-Type: application/json" \
     -d "{\"destination_url\": \"$url\"}"
 done
@@ -306,7 +308,7 @@ After migration, verify each flow works:
 - [ ] **Cold start deep link** — `getInitialDeepLink()` returns the correct link
 - [ ] **Warm start deep link** — `onDeepLink()` listener fires when a link is tapped while the app is running
 - [ ] **Custom parameters preserved** — check `deepLink.customParams` matches what you configured
-- [ ] **Deferred deep links work** — delete app, click link, reinstall, launch, verify `checkDeferredDeepLink()` returns match
+- [ ] **Deferred deep links work**: uninstall the app on either platform, click link, install, launch, verify `checkDeferredDeepLink()` returns match. A reinstall retests on iOS and on Android
 - [ ] **iOS Universal Links work** — tap a WarpLink URL on a physical iOS device
 - [ ] **Android App Links work** — tap a WarpLink URL on an Android device
 - [ ] **Error handling works** — test with an invalid URL, expired link, and no connectivity
