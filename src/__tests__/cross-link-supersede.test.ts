@@ -149,7 +149,7 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
     }));
 
     jest.isolateModules(() => {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       WarpLink = (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });

@@ -121,7 +121,7 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     }));
 
     jest.isolateModules(() => {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       WarpLink = (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });

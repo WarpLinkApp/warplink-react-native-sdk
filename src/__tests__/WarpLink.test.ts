@@ -1181,7 +1181,7 @@ describe('onDeepLink', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -1321,7 +1321,7 @@ describe('getInitialDeepLink', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -1404,7 +1404,7 @@ describe('deferred deep link lifecycle', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -1617,7 +1617,7 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -2207,7 +2207,7 @@ describe('sinkless configure() still attributes the install', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -2301,7 +2301,7 @@ describe('orchestrator behaviours the review found unpinned', () => {
     }));
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -2377,7 +2377,7 @@ describe('NativeWarpLink module not linked', () => {
 
     // Re-import after mock change
     const { default: NativeWarpLink } =
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../NativeWarpLink') as typeof import('../NativeWarpLink');
 
     expect(() => NativeWarpLink.configure({})).toThrow(

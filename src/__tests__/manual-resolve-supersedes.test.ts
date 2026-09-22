@@ -129,7 +129,7 @@ describe('a manual resolve supersedes the automatic tap it cancels (warplink-17r
     }));
 
     jest.isolateModules(() => {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       WarpLink = (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -282,7 +282,7 @@ describe('a newer tap that never settles cannot block an older tap forever (warp
     }));
 
     jest.isolateModules(() => {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       WarpLink = (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });

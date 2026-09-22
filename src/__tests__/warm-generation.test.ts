@@ -109,7 +109,7 @@ describe('a warm tap still resolving across configure() (warplink-4uzm)', () => 
     }));
 
     jest.isolateModules(() => {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       WarpLink = (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
