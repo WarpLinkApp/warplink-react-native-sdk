@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the GitHub Release for the tag
-      id-token: write # mint the OIDC token npm needs for provenance
+      id-token: write # mint the OIDC token npm Trusted Publishing and provenance need
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,10 +55,12 @@ jobs:
         run: npm test
       - if: github.event_name == 'push'
         run: npm run build
+      # Trusted Publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - name: Update npm for Trusted Publishing
+        if: github.event_name == 'push'
+        run: npm install -g npm@11.6.2
       - if: github.event_name == 'push'
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
