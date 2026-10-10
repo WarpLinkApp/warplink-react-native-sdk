@@ -6,6 +6,33 @@ file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.1.1] - 2026-10-10
+
+### Changed
+
+- **Rate limits are retried once.** The native SDKs this package bridges to now
+  retry a `429` from the link resolve or the attribution match once when its
+  `Retry-After` is 5 seconds or less (1 second when the header is unreadable). A
+  longer `Retry-After` is not retried. When the call still fails, it rejects with
+  a `WarpLinkError` whose code is `E_SERVER_ERROR`. The JavaScript API does not
+  change.
+
+### Clarification
+
+This corrects the 1.1.0 `matchGuaranteed` guidance below. `matchGuaranteed` is
+not a credential. Use it, like a confidence threshold, to pick the destination
+the attribution result routes to. A probabilistic match is a best guess from a
+fingerprint shaped by the network rather than the device, so it can name the
+wrong user. Do not sign anyone in, or show personal data, on this flag.
+Authenticate the user and check authorization separately.
+
+On Android, a deterministic match comes from the Play Install Referrer. On iOS,
+the IDFV lookup returns the install the device already has, with that install's
+own match type and confidence. Neither lookup turns a probabilistic match into a
+guaranteed one.
+
 ## [1.1.0] - 2026-09-15
 
 Additive, opt-out release. A bare `configure({ apiKey, onLink })` now makes deep
@@ -91,6 +118,9 @@ non-breaking.
   referrer, or a device-id match) and `false` for a probabilistic one. Gate
   auto-login, personal data, and anything else you cannot safely show the wrong
   person on this flag, not on the match alone.
+  **Correction:** this guidance was wrong. A device-ID lookup does not make a
+  match deterministic, and `matchGuaranteed` is not a credential. See
+  [1.1.1](#111---2026-10-10).
 - **Match window:** the deferred payload's default lifetime drops from 72 hours
   to 6, with a 24-hour ceiling. The probabilistic tier only. Deterministic
   matches are unaffected. A deferred link that is claimed more than 24 hours

@@ -4,7 +4,7 @@
 [![npm version](https://img.shields.io/npm/v/@warplink/react-native.svg)](https://www.npmjs.com/package/@warplink/react-native)
 [![CI](https://github.com/WarpLinkApp/warplink-react-native-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/WarpLinkApp/warplink-react-native-sdk/actions/workflows/ci.yml)
 
-Deep linking SDK for React Native. Handle Universal Links and App Links, resolve deferred deep links, and attribute installs with [WarpLink](https://warplink.app).
+Deep linking, install attribution, and real-time analytics for React Native. Handle Universal Links and App Links, resolve deferred deep links, and attribute installs with [WarpLink](https://warplink.app).
 
 ## Requirements
 
@@ -93,7 +93,7 @@ the throw surfaces as an unhandled rejection.
 
 ### Getting your SDK key
 
-`apiKey` takes an **SDK key**, created under **API Keys** > **SDK key** in the
+`apiKey` takes an **SDK key**, created under **Keys** > **SDK keys** in the
 dashboard. It is pre-scoped for link resolution and install attribution. API keys
 are a separate credential for backend scripts, CI, and AI agents, and they cannot
 record installs. Both share the `wl_live_` prefix, so pasting an API key here is

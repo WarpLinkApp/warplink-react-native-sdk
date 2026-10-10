@@ -1184,9 +1184,11 @@ export const WarpLink = {
    * `configure()` delivers a match to `onLink` at most once across launches;
    * this manual call always returns the cached result for advanced flows.
    *
-   * `matchGuaranteed` is true only for a deterministic match. Gate anything
-   * sensitive (auto sign-in, showing personal data) on it. `matchConfidence`
-   * is a 0.0–1.0 score, useful for reporting but not for a trust decision.
+   * `matchGuaranteed` is true only for a deterministic match. Use it, like
+   * `matchConfidence`, to pick the destination to route to, not as a
+   * credential. Authenticate the user and check authorization separately
+   * before showing private data or doing anything sensitive, guaranteed
+   * match or not.
    *
    * @returns Deferred deep link or `null`.
    * @throws {WarpLinkError} `E_NOT_CONFIGURED` — SDK not initialized.
@@ -1256,7 +1258,7 @@ export const WarpLink = {
    *
    * @example
    * ```ts
-   * console.log(await WarpLink.sdkVersion()); // "1.1.0"
+   * console.log(await WarpLink.sdkVersion()); // "1.1.1"
    * ```
    */
   async sdkVersion(): Promise<string> {

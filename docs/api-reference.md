@@ -60,7 +60,7 @@ source is independently disable-able via `automaticDeepLinks` /
 ```tsx
 import { WarpLink } from '@warplink/react-native';
 
-// Opt-out model — one call wires everything.
+// Opt-out model: one call wires everything.
 WarpLink.configure({
   apiKey: 'wl_live_yoursdkkeyhere000000000000000000',
   onLink: ({ deepLink, error }) => {
@@ -95,7 +95,7 @@ Resolve a deep link URL to its link data. Call this when you receive a URL from 
 |-----------|------|-------------|
 | `url` | `string` | The deep link URL to resolve (e.g., `https://aplnk.to/abc123`). |
 
-**Returns:** `Promise<WarpLinkDeepLink | null>` — the resolved deep link, or `null` if the response could not be deserialized.
+**Returns:** `Promise<WarpLinkDeepLink | null>`, the resolved deep link, or `null` if the response could not be deserialized.
 
 **Errors:**
 
@@ -139,7 +139,7 @@ checkDeferredDeepLink(): Promise<WarpLinkDeepLink | null>
 
 Check for a deferred deep link on first launch. Returns `null` if no match was found. Once the check has completed, later calls return the same cached result instead of running it again.
 
-**Returns:** `Promise<WarpLinkDeepLink | null>` — the matched deep link with `isDeferred: true`, or `null`.
+**Returns:** `Promise<WarpLinkDeepLink | null>`, the matched deep link with `isDeferred: true`, or `null`.
 
 **Behavior:**
 - On the first launch of an install: collects device signals, sends them to the attribution API, and returns the match result.
@@ -164,14 +164,14 @@ const link = await WarpLink.checkDeferredDeepLink();
 if (link?.isDeferred) {
   const confidence = link.matchConfidence ?? 0;
   if (link.matchGuaranteed) {
-    // Deterministic match: safe to restore identity, not just content
-    restoreAccount(link);
+    // Deterministic match: a reliable hint, never an identity
+    personalizeOnboarding(link);
   }
   if (confidence > 0.5) {
-    // High confidence — route to specific content
+    // High confidence: route to specific content
     navigateTo(link.deepLinkUrl ?? link.destination);
   } else {
-    // Low confidence — show suggestion
+    // Low confidence: show suggestion
     showSuggestion(link.destination);
   }
 }
@@ -187,11 +187,11 @@ getAttributionResult(): Promise<AttributionResult | null>
 
 Get install attribution data for the current app install. Returns the attribution match including the link that drove the install.
 
-**Returns:** `Promise<AttributionResult | null>` — attribution data, or `null` for a genuine no-match (organic install).
+**Returns:** `Promise<AttributionResult | null>`, attribution data, or `null` for a genuine no-match (organic install).
 
 **Behavior:**
 - Returns `null` when the native module reports no attribution (organic install).
-- Throws `E_DECODING_ERROR` when a non-null but malformed payload is returned —
+- Throws `E_DECODING_ERROR` when a non-null but malformed payload is returned,
   so a decode failure is distinguishable from a genuine no-match.
 
 **Errors:**
@@ -227,7 +227,7 @@ isConfigured(): Promise<boolean>
 
 Check whether the SDK has been configured via `configure()`.
 
-**Returns:** `Promise<boolean>` — `true` if `configure()` has been called successfully.
+**Returns:** `Promise<boolean>`, `true` if `configure()` has been called successfully.
 
 **Example:**
 
@@ -254,7 +254,7 @@ Register a listener for incoming deep links (warm-start events). The listener re
 |-----------|------|-------------|
 | `listener` | `DeepLinkListener` | Callback function that receives `DeepLinkEvent` objects. |
 
-**Returns:** `() => void` — an unsubscribe function. Call it to remove the listener.
+**Returns:** `() => void`, an unsubscribe function. Call it to remove the listener.
 
 **Behavior:**
 - Supports multiple concurrent listeners. Each listener receives every event.
@@ -295,11 +295,11 @@ getInitialDeepLink(): Promise<WarpLinkDeepLink | null>
 
 Get the deep link that launched the app (cold start). Returns `null` if the app was not launched via a deep link.
 
-**Returns:** `Promise<WarpLinkDeepLink | null>` — the resolved deep link, or `null`.
+**Returns:** `Promise<WarpLinkDeepLink | null>`, the resolved deep link, or `null`.
 
 **Behavior:**
 - Retrieves the initial URL from the native module, then resolves it via `handleDeepLink()`.
-- Only returns a value on cold start — if the app was launched by tapping a WarpLink URL.
+- Only returns a value on cold start, if the app was launched by tapping a WarpLink URL.
 
 **Errors:**
 
@@ -431,7 +431,7 @@ interface WarpLinkDeepLink {
 | `isDeferred` | `boolean` | Whether this deep link was resolved via deferred attribution. |
 | `matchType` | `'deterministic' \| 'probabilistic' \| null` | The type of attribution match. `null` for direct links. |
 | `matchConfidence` | `number \| null` | The confidence score (0.0 to 1.0). `null` for direct links. |
-| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Gate anything sensitive (auto sign-in, showing personal data) on this rather than on a confidence threshold: a probabilistic match is a best guess from a network-shaped fingerprint and can name the wrong user. |
+| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match is a best guess from a network-shaped fingerprint and can name the wrong user. Authenticate the user and check authorization separately before anything sensitive. |
 
 **Working with `customParams`:**
 
@@ -467,7 +467,7 @@ interface AttributionResult {
 | `linkId` | `string` | The ID of the link that drove the install. |
 | `matchType` | `'deterministic' \| 'probabilistic'` | The type of attribution match. Always present (unlike `WarpLinkDeepLink` where it's nullable). |
 | `matchConfidence` | `number` | Confidence score (0.0 to 1.0). Always present. |
-| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Gate anything sensitive (auto sign-in, showing personal data) on this rather than on a confidence threshold: a probabilistic match is a best guess from a network-shaped fingerprint and can name the wrong user. |
+| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match is a best guess from a network-shaped fingerprint and can name the wrong user. Authenticate the user and check authorization separately before anything sensitive. |
 | `isDeferred` | `boolean` | Whether this attribution was from a deferred deep link. |
 
 > **Removed in 1.1.0:** the `installId` field. The native serializers never
@@ -550,7 +550,7 @@ try {
         console.error('SDK not configured');
         break;
       case ErrorCodes.E_NETWORK_ERROR:
-        console.error('Network error — retry later');
+        console.error('Network error: retry later');
         break;
       default:
         console.error(`[${error.code}] ${error.message}`);
@@ -581,7 +581,7 @@ const ErrorCodes = {
 
 | Code | Description |
 |------|-------------|
-| `E_NOT_CONFIGURED` | SDK not initialized — call `configure()` first. |
+| `E_NOT_CONFIGURED` | SDK not initialized: call `configure()` first. |
 | `E_INVALID_API_KEY_FORMAT` | Key doesn't match `wl_(live\|test)_[a-zA-Z0-9]{32}`. |
 | `E_INVALID_API_KEY` | Key rejected by server (revoked, incorrect, or an API key instead of an SDK key). |
 | `E_NETWORK_ERROR` | Network unreachable or request timed out. |
@@ -606,6 +606,6 @@ type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
 
 ## Related Guides
 
-- [Error Handling](error-handling.md) — recovery actions for each error code
-- [Deferred Deep Links](deferred-deep-links.md) — `checkDeferredDeepLink()` in depth
-- [Attribution](attribution.md) — match types and confidence scores
+- [Error Handling](error-handling.md): recovery actions for each error code
+- [Deferred Deep Links](deferred-deep-links.md): `checkDeferredDeepLink()` in depth
+- [Attribution](attribution.md): match types and confidence scores

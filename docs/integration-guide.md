@@ -453,7 +453,7 @@ Then run `npx expo prebuild` to regenerate the native project.
 
 ## Step 7: Configure the SDK (opt-out model)
 
-Initialize the SDK as early as possible — before any React components mount. Call `configure()` once, outside of any component, and pass an `onLink` callback. This single sink receives **cold-start, warm-start, and deferred** deep links automatically. No `useEffect`, no manual subscriptions.
+Initialize the SDK as early as possible, before any React components mount. Call `configure()` once, outside of any component, and pass an `onLink` callback. This single sink receives **cold-start, warm-start, and deferred** deep links automatically. No `useEffect`, no manual subscriptions.
 
 ```tsx
 import { WarpLink } from '@warplink/react-native';
@@ -546,7 +546,7 @@ Step 5, and added to your intent filter in Step 6.
 >
 > When `onLink` is provided, a native configuration failure is delivered to
 > `onLink` as an `{ error }` event rather than rejecting the promise. When
-> `onLink` is omitted, the promise rejects with a `WarpLinkError` instead — so
+> `onLink` is omitted, the promise rejects with a `WarpLinkError` instead, so
 > `await configure(...)` (or a `.catch`) is recommended in the manual model.
 
 > **`matchWindowHours` is server-side only.** The effective match window is
@@ -561,8 +561,8 @@ Step 5, and added to your intent filter in Step 6.
 
 Deep links arrive in two scenarios:
 
-- **Cold start** — the app was not running and is launched by a deep link
-- **Warm start** — the app was in the background and is brought to the foreground by a deep link
+- **Cold start**: the app was not running and is launched by a deep link
+- **Warm start**: the app was in the background and is brought to the foreground by a deep link
 
 Handle both in your root component:
 
@@ -597,7 +597,7 @@ function App() {
 
 ### With React Navigation
 
-The opt-out model composes cleanly with React Navigation — route from a single
+The opt-out model composes cleanly with React Navigation: route from a single
 `onLink`:
 
 ```tsx
@@ -627,7 +627,7 @@ function App() {
 
 ## Step 9: Deferred Deep Links (automatic)
 
-Deferred deep links work when a user clicks a WarpLink URL, installs your app, and opens it for the first time. The SDK matches the install back to the original click and delivers it through `onLink` with `isDeferred: true` — **automatically**, as part of Step 7.
+Deferred deep links work when a user clicks a WarpLink URL, installs your app, and opens it for the first time. The SDK matches the install back to the original click and delivers it through `onLink` with `isDeferred: true`, **automatically**, as part of Step 7.
 
 If you set `automaticDeferredDeepLinks: false`, or you omitted `onLink` and so have nowhere for the match to arrive, call `checkDeferredDeepLink()` yourself once on app startup. Omitting `onLink` does not stop the check: the install is attributed either way, and the manual call reads the result.
 
@@ -676,14 +676,14 @@ curl -X POST https://api.warplink.app/v1/links \
 
 1. Build and run your app on a physical iOS device
 2. Open the test link in Safari (or send it via Messages/Notes)
-3. Tap the link — your app should open and the deep link callback should fire
+3. Tap the link: your app should open and the deep link callback should fire
 4. Check the Xcode console for debug log messages if you enabled `debugLogging`
 
 ### Android
 
 1. Build and run your app on a device or emulator
 2. Open the test link in Chrome
-3. Tap the link — your app should open directly (if App Links verification succeeded)
+3. Tap the link: your app should open directly (if App Links verification succeeded)
 4. Check `adb logcat` for WarpLink log messages if you enabled `debugLogging`
 
 ### Testing Deferred Deep Links
@@ -696,9 +696,9 @@ curl -X POST https://api.warplink.app/v1/links \
    Play referrer from an install that began more than seven days earlier is
    attributed but not delivered as a deferred link.
    Erasing the simulator also works if you want a device with no history at all.
-2. Open the test link in the browser — you'll be redirected to the App Store / Play Store (or a fallback URL during development)
+2. Open the test link in the browser: you'll be redirected to the App Store / Play Store (or a fallback URL during development)
 3. Install the app (via Xcode, Android Studio, or TestFlight/internal testing)
-4. Launch the app — `checkDeferredDeepLink()` should return the matched deep link
+4. Launch the app: `checkDeferredDeepLink()` should return the matched deep link
 
 ## Step 12: Debugging Tips
 
@@ -712,7 +712,7 @@ curl -X POST https://api.warplink.app/v1/links \
 
 ## Next Steps
 
-- [API Reference](api-reference.md) — full documentation of all public types and methods
-- [Error Handling](error-handling.md) — how to handle every error case
-- [Attribution](attribution.md) — understanding confidence scores and match types
-- [Deferred Deep Links](deferred-deep-links.md) — in-depth deferred deep link guide
+- [API Reference](api-reference.md): full documentation of all public types and methods
+- [Error Handling](error-handling.md): how to handle every error case
+- [Attribution](attribution.md): understanding confidence scores and match types
+- [Deferred Deep Links](deferred-deep-links.md): in-depth deferred deep link guide

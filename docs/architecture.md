@@ -36,9 +36,9 @@ TypeScript API (WarpLink.ts)
 Developers create links via the [WarpLink dashboard](https://warplink.app) or the [REST API](https://api.warplink.app/v1). Each link has:
 
 - A **short URL** (e.g., `https://aplnk.to/abc123`)
-- A **destination URL** — where the user should end up
+- A **destination URL**: where the user should end up
 - Optional **platform-specific deep link URLs** (e.g., `myapp://product/123`)
-- Optional **custom parameters** — arbitrary key-value data attached to the link
+- Optional **custom parameters**: arbitrary key-value data attached to the link
 
 When a link is created, it's stored in the database and cached at the edge for sub-10ms resolution globally.
 
@@ -135,7 +135,7 @@ User installs and opens the app
         → Android: preferred language, timezone (IANA name and offset), Play Install Referrer, reinstall flag, package name
     → Native SDK calls POST /attribution/match with device signals
     → Server compares device signals against stored click signals
-        → IDFV match? → deterministic (confidence 1.0)
+        → IDFV match? → the stored install, with its own match type and confidence
         → Play Install Referrer match? → deterministic (confidence 1.0)
         → Fingerprint match? → probabilistic (confidence 0.20 to 0.85 before multipliers)
     → Native SDK caches result
@@ -194,7 +194,7 @@ The native SDK caches a successful SDK key validation for 24 hours:
 - **JavaScript callbacks** are delivered on the React Native bridge thread
 - **NativeEventEmitter** events are delivered on the React Native event loop
 - **`configure()`** can be called from any thread but should be called once during initialization
-- **Multiple sinks** are safe — the auto-wired `onLink` and any manual `onDeepLink` listeners share a single native event subscription managed in module-level state
+- **Multiple sinks** are safe: the auto-wired `onLink` and any manual `onDeepLink` listeners share a single native event subscription managed in module-level state
 
 ## Zero Dependencies Philosophy
 
@@ -211,7 +211,7 @@ This minimizes bundle size, avoids supply chain risks, and eliminates version co
 
 ## Related Guides
 
-- [API Reference](api-reference.md) — all public types and methods
-- [Deferred Deep Links](deferred-deep-links.md) — detailed deferred deep link flow
-- [Attribution](attribution.md) — matching tiers and confidence scores
-- [Integration Guide](integration-guide.md) — step-by-step setup
+- [API Reference](api-reference.md): all public types and methods
+- [Deferred Deep Links](deferred-deep-links.md): detailed deferred deep link flow
+- [Attribution](attribution.md): matching tiers and confidence scores
+- [Integration Guide](integration-guide.md): step-by-step setup

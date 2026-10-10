@@ -46,8 +46,7 @@ EOF
 
 cat > "$WORK/build.gradle.kts" <<'EOF'
 plugins {
-    id("com.android.library") version "8.7.3" apply false
-    id("org.jetbrains.kotlin.android") version "2.1.0" apply false
+    id("com.android.library") version "9.4.1" apply false
 }
 EOF
 
@@ -55,7 +54,6 @@ EOF
 cat > "$WORK/bridge/build.gradle.kts" <<'EOF'
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.android")
 }
 android {
     namespace = "app.warplink.reactnative"
@@ -65,17 +63,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     sourceSets { getByName("main") { java.srcDirs("src/main/kotlin") } }
 }
 android {
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 dependencies {
-    implementation("app.warplink:sdk:1.1.0")
+    implementation("app.warplink:sdk:1.1.1")
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.14.1")
-    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("androidx.test:core:1.7.0")
 }
 EOF
 
@@ -300,8 +297,7 @@ EOF
 
 cat > "$WORK/real/build.gradle.kts" <<'EOF'
 plugins {
-    id("com.android.library") version "8.7.3" apply false
-    id("org.jetbrains.kotlin.android") version "2.1.0" apply false
+    id("com.android.library") version "9.4.1" apply false
 }
 EOF
 
@@ -312,7 +308,6 @@ for RN_VERSION in $RN_MATRIX; do
   cat > "$WORK/real/bridge/build.gradle.kts" <<EOF
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.android")
 }
 android {
     namespace = "app.warplink.reactnative"
@@ -325,14 +320,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     sourceSets { getByName("main") { java.srcDirs("src/main/kotlin") } }
 }
 dependencies {
     // compileOnly, the way a React Native library consumes React Native: the
     // host app supplies it at runtime.
     compileOnly("com.facebook.react:react-android:$RN_VERSION")
-    implementation("app.warplink:sdk:1.1.0")
+    implementation("app.warplink:sdk:1.1.1")
 }
 EOF
   ( cd "$WORK/real" && ./gradlew :bridge:compileDebugKotlin --rerun-tasks --quiet 2>&1 )

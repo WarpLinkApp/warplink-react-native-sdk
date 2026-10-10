@@ -7,7 +7,7 @@ Deferred deep links let you route users to specific content even when they don't
 Standard Universal Links (iOS) and App Links (Android) only work when the app is already installed. Deferred deep links solve the "click before install" problem:
 
 1. User clicks a WarpLink URL (e.g., a product share link)
-2. App is not installed — user is redirected to the App Store or Play Store
+2. App is not installed: user is redirected to the App Store or Play Store
 3. User installs the app
 4. On first launch, the SDK matches the install to the original click
 5. Your app routes the user to the intended content (e.g., the shared product)
@@ -39,7 +39,7 @@ WarpLink.configure({
   apiKey: 'wl_live_yoursdkkeyhere000000000000000000',
   onLink: ({ deepLink }) => {
     if (deepLink?.isDeferred) {
-      // Install matched to an original click — route to intended content.
+      // Install matched to an original click: route to intended content.
       navigateTo(deepLink.deepLinkUrl ?? deepLink.destination);
     }
   },
@@ -65,12 +65,12 @@ function App() {
     WarpLink.checkDeferredDeepLink()
       .then((link) => {
         if (link?.isDeferred) {
-          // User arrived via a WarpLink — route to intended content
+          // User arrived via a WarpLink: route to intended content
           navigateTo(link.deepLinkUrl ?? link.destination);
         }
       })
       .catch((error) => {
-        // Network error on first launch — show default experience
+        // Network error on first launch: show default experience
         console.warn('Deferred deep link check failed:', error.message);
       })
       .finally(() => {
@@ -92,7 +92,7 @@ The match confidence depends on the matching method and time elapsed since the c
 
 | Scenario | Confidence | Match Type |
 |----------|------------|------------|
-| IDFV re-engagement (iOS, app was previously installed) | 1.0 | `deterministic` |
+| IDFV repeat check (iOS, app was previously installed) | The stored install's own score | The stored install's own type |
 | Play Install Referrer (Android) | 1.0 | `deterministic` |
 | Fingerprint, < 1 hour since click | 0.85 | `probabilistic` |
 | Fingerprint, < 3 hours since click | 0.65 | `probabilistic` |
@@ -107,7 +107,7 @@ Two multipliers then reduce whichever ceiling applied: 0.6 when more than one
 claimable click shared the fingerprint, and 0.6 / 0.9 / 1.0 for a
 carrier-grade-NAT, household-IPv4, or IPv6 click address.
 
-**Recommendation:** Route to specific content when `matchConfidence` is above 0.5. Show generic onboarding when below 0.5. Gate anything sensitive on `matchGuaranteed` instead, which is `true` only for a deterministic match: a probabilistic match is a best guess from a network-shaped fingerprint and can name the wrong user.
+**Recommendation:** Route to specific content when `matchConfidence` is above 0.5. Show generic onboarding when below 0.5. `matchGuaranteed` is `true` only for a deterministic match; use it to pick the destination, not as a credential, since a probabilistic match is a best guess from a network-shaped fingerprint and can name the wrong user. Authenticate the user and check authorization separately before anything sensitive.
 
 ## Match Window Configuration
 
@@ -132,13 +132,13 @@ probabilistic tier only; the deterministic paths are unaffected.
 
 ### iOS
 
-- **Deterministic matching:** IDFV (Identifier for Vendor) — works for re-engagement when the app was previously installed. No ATT prompt needed.
+- **IDFV repeat check:** IDFV (Identifier for Vendor) recognizes an install asking again when the app was previously installed, and returns that install with its own match type and confidence. It never produces a guaranteed match. No ATT prompt needed.
 - **Probabilistic matching:** Fingerprint (IP + preferred language + timezone, hashed server-side). Used for first-time installs.
 - **No IDFA.** The SDK does not use IDFA and does not trigger App Tracking Transparency prompts.
 
 ### Android
 
-- **Deterministic matching:** Play Install Referrer — the Play Store passes the click referrer through the install process. This is the most accurate method (confidence 1.0).
+- **Deterministic matching:** Play Install Referrer. The Play Store passes the click referrer through the install process. This is the most accurate method (confidence 1.0).
 - **Probabilistic fallback:** If Play Install Referrer is unavailable (sideloaded app, Play Services missing), the SDK falls back to fingerprint matching (IP + preferred language + timezone).
 
 ## Code Example with React Navigation
@@ -157,13 +157,13 @@ function useCheckDeferredDeepLink() {
 
       const confidence = link.matchConfidence ?? 0;
 
-      // Identity work needs a deterministic match, not a high score.
+      // A guaranteed match is a reliable hint, never an identity.
       if (link.matchGuaranteed) {
-        restoreAccount(link);
+        personalizeOnboarding(link);
       }
 
       if (confidence > 0.5) {
-        // High confidence — navigate directly
+        // High confidence: navigate directly
         const productId = link.customParams['product_id'] as string | undefined;
         if (productId) {
           navigation.navigate('Product', { id: productId });
@@ -171,13 +171,13 @@ function useCheckDeferredDeepLink() {
           navigation.navigate('WebView', { url: link.destination });
         }
       } else if (confidence > 0.3) {
-        // Medium confidence — show suggestion
+        // Medium confidence: show suggestion
         navigation.navigate('Suggestion', {
           message: 'Were you looking for this?',
           url: link.destination,
         });
       }
-      // Below 0.3 — ignore, show default onboarding
+      // Below 0.3: ignore, show default onboarding
     });
   }, [navigation]);
 }
@@ -199,7 +199,7 @@ function useCheckDeferredDeepLink() {
 ### Offline First Launch
 
 If the device has no network connectivity on first launch, the check fails with a
-`WarpLinkError` (code `E_NETWORK_ERROR`) — surfaced through `onLink` as an
+`WarpLinkError` (code `E_NETWORK_ERROR`), surfaced through `onLink` as an
 `{ error }` event (or rejected from a manual `checkDeferredDeepLink()` call). The
 first-launch marker is **not** consumed on a failed attempt, so the check
 automatically retries on the next launch once connectivity is restored.
@@ -249,7 +249,7 @@ default, 24 at most), the deferred deep link will not be found.
 
 ## Related Guides
 
-- [Attribution](attribution.md) — detailed explanation of matching tiers
-- [Error Handling](error-handling.md) — handling deferred deep link errors
-- [Troubleshooting](troubleshooting.md) — common deferred deep link issues
-- [Architecture](architecture.md) — end-to-end deferred deep link flow
+- [Attribution](attribution.md): detailed explanation of matching tiers
+- [Error Handling](error-handling.md): handling deferred deep link errors
+- [Troubleshooting](troubleshooting.md): common deferred deep link issues
+- [Architecture](architecture.md): end-to-end deferred deep link flow

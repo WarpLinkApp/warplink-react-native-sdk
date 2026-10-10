@@ -61,6 +61,7 @@ let WarpLink: typeof import('../WarpLink').WarpLink;
 const VALID_LIVE_KEY = 'wl_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6';
 const URL_A = 'https://aplnk.to/rn12-retap';
 const URL_B = 'https://aplnk.to/rn12-other';
+const TEST_ADDRESS = 'https://fampilot.aplnk.to/test';
 
 const link = (linkId: string) => ({
   linkId,
@@ -258,5 +259,62 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     await flushPromises();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * The permanent test address of an app host (`https://{handle}.aplnk.to/test`) is no link: the
+   * server answers it with the ordinary not found. A phone with an updated build opens the app on
+   * it, so the SDK sees it and must handle that answer like any not found: one error to onLink, no
+   * loop, no crash, and a deliberate re-tap still reaches the native module.
+   */
+  it('hands the host one link-not-found for the app host test address, without a retry loop', async () => {
+    const events: DeepLinkEvent[] = [];
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1000);
+    mockHandleDeepLink.mockRejectedValue(nativeError(ErrorCodes.E_LINK_NOT_FOUND, 'Link not found'));
+
+    await WarpLink.configure({
+      apiKey: VALID_LIVE_KEY,
+      onLink: (event) => events.push(event),
+    });
+
+    emitNativeEvent({ url: TEST_ADDRESS });
+    await flushPromises(20);
+
+    expect(mockHandleDeepLink).toHaveBeenCalledTimes(1);
+    expect(mockHandleDeepLink).toHaveBeenCalledWith(TEST_ADDRESS);
+    expect(received(events)).toEqual([`error:${ErrorCodes.E_LINK_NOT_FOUND}`]);
+
+    // The failure drops its stamp, so the person tapping it again gets a fresh answer, once.
+    nowSpy.mockReturnValue(1800);
+    emitNativeEvent({ url: TEST_ADDRESS });
+    await flushPromises(20);
+
+    expect(mockHandleDeepLink).toHaveBeenCalledTimes(2);
+    expect(received(events)).toEqual([
+      `error:${ErrorCodes.E_LINK_NOT_FOUND}`,
+      `error:${ErrorCodes.E_LINK_NOT_FOUND}`,
+    ]);
+  });
+
+  it('keeps delivering real links after the test address was answered not found', async () => {
+    const events: DeepLinkEvent[] = [];
+    jest.spyOn(Date, 'now').mockReturnValue(1000);
+    mockHandleDeepLink.mockImplementation((url: string) =>
+      url === TEST_ADDRESS
+        ? Promise.reject(nativeError(ErrorCodes.E_LINK_NOT_FOUND, 'Link not found'))
+        : Promise.resolve(LINK_A)
+    );
+
+    await WarpLink.configure({
+      apiKey: VALID_LIVE_KEY,
+      onLink: (event) => events.push(event),
+    });
+
+    emitNativeEvent({ url: TEST_ADDRESS });
+    await flushPromises(20);
+    emitNativeEvent({ url: URL_A });
+    await flushPromises(20);
+
+    expect(received(events)).toEqual([`error:${ErrorCodes.E_LINK_NOT_FOUND}`, `link:${LINK_A.linkId}`]);
   });
 });

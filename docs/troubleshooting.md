@@ -295,7 +295,7 @@ Import from the main package entry point:
 // Correct
 import { WarpLink, WarpLinkError, ErrorCodes } from '@warplink/react-native';
 
-// Wrong — don't import from internal paths
+// Wrong: don't import from internal paths
 import { WarpLink } from '@warplink/react-native/src/WarpLink';
 ```
 
@@ -322,7 +322,7 @@ WarpLink.configure({
 });
 ```
 
-### iOS — Xcode Console
+### iOS: Xcode Console
 
 Look for `[WarpLink]` prefixed messages in the Xcode console. Key messages:
 - `"Configured with API key: wl_live_****xxxx"`: SDK initialized
@@ -330,7 +330,7 @@ Look for `[WarpLink]` prefixed messages in the Xcode console. Key messages:
 - `"Deferred deep link matched: <linkId>"`: match found
 - `"No deferred deep link match"`: no match found
 
-### Android — Logcat
+### Android: Logcat
 
 Filter WarpLink logs in Android Studio or via `adb`:
 
@@ -338,7 +338,7 @@ Filter WarpLink logs in Android Studio or via `adb`:
 adb logcat -s WarpLink
 ```
 
-### React Native — Metro Console
+### React Native: Metro Console
 
 Native debug log messages from both platforms are bridged to the React Native console. You'll see them in the Metro terminal output or in React Native Debugger.
 
@@ -386,6 +386,6 @@ npx expo run:ios   # or run:android
 
 ## Related Guides
 
-- [Integration Guide](integration-guide.md) — step-by-step setup
-- [Error Handling](error-handling.md) — handling SDK errors programmatically
-- [Deferred Deep Links](deferred-deep-links.md) — understanding deferred attribution
+- [Integration Guide](integration-guide.md): step-by-step setup
+- [Error Handling](error-handling.md): handling SDK errors programmatically
+- [Deferred Deep Links](deferred-deep-links.md): understanding deferred attribution

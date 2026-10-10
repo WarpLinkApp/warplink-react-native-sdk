@@ -8,7 +8,7 @@ The WarpLink React Native SDK uses the `WarpLinkError` class for all error cases
 
 **When:** Any SDK method is called before `WarpLink.configure()`.
 
-**Fix:** Call `configure()` at app startup, before any other SDK calls — outside of any React component.
+**Fix:** Call `configure()` at app startup, before any other SDK calls, outside of any React component.
 
 ```tsx
 import { WarpLink } from '@warplink/react-native';
@@ -61,7 +61,7 @@ WarpLink.configure({
 
 ### `E_NETWORK_ERROR`
 
-**When:** A network request fails — no internet connectivity, DNS resolution failure, or request timeout.
+**When:** A network request fails: no internet connectivity, DNS resolution failure, or request timeout.
 
 **Fix:** Retry with exponential backoff. Check device connectivity before retrying.
 
@@ -151,10 +151,10 @@ When using `onDeepLink()`, errors are delivered via the `DeepLinkEvent` discrimi
 ```tsx
 WarpLink.onDeepLink((event) => {
   if (event.deepLink) {
-    // Success — navigate to content
+    // Success: navigate to content
     navigateTo(event.deepLink.destination);
   } else if (event.error) {
-    // Error — handle gracefully
+    // Error: handle gracefully
     handleWarpLinkError(event.error);
   }
 });
@@ -170,12 +170,12 @@ import { WarpLink, WarpLinkError, ErrorCodes } from '@warplink/react-native';
 function handleWarpLinkError(error: WarpLinkError): void {
   switch (error.code) {
     case ErrorCodes.E_NOT_CONFIGURED:
-      // Programming error — configure SDK earlier in app lifecycle
+      // Programming error: configure SDK earlier in app lifecycle
       console.error('WarpLink SDK not configured');
       break;
 
     case ErrorCodes.E_INVALID_API_KEY_FORMAT:
-      // Programming error — check API key format
+      // Programming error: check API key format
       console.error('Invalid WarpLink API key format');
       break;
 
@@ -190,12 +190,12 @@ function handleWarpLinkError(error: WarpLinkError): void {
       break;
 
     case ErrorCodes.E_SERVER_ERROR:
-      // Server issue — retry later
+      // Server issue: retry later
       showAlert('Server error. Please try again later.');
       break;
 
     case ErrorCodes.E_INVALID_URL:
-      // URL is not a WarpLink URL — ignore or log
+      // URL is not a WarpLink URL: ignore or log
       break;
 
     case ErrorCodes.E_LINK_NOT_FOUND:
@@ -248,5 +248,5 @@ useEffect(() => {
 
 ## Related Guides
 
-- [API Reference](api-reference.md) — `WarpLinkError` and `ErrorCodes` documentation
-- [Troubleshooting](troubleshooting.md) — common issues and solutions
+- [API Reference](api-reference.md): `WarpLinkError` and `ErrorCodes` documentation
+- [Troubleshooting](troubleshooting.md): common issues and solutions

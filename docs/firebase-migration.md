@@ -226,7 +226,7 @@ useEffect(() => {
     .getInitialLink()
     .then((link) => {
       if (link) {
-        // Could be a deferred deep link — no way to distinguish
+        // Could be a deferred deep link: no way to distinguish
         handleDeepLink(link.url);
       }
     });
@@ -304,19 +304,19 @@ During migration, you can maintain both SDKs temporarily:
 
 After migration, verify each flow works:
 
-- [ ] **SDK initializes** — enable `debugLogging: true` and check console
-- [ ] **Cold start deep link** — `getInitialDeepLink()` returns the correct link
-- [ ] **Warm start deep link** — `onDeepLink()` listener fires when a link is tapped while the app is running
-- [ ] **Custom parameters preserved** — check `deepLink.customParams` matches what you configured
+- [ ] **SDK initializes**: enable `debugLogging: true` and check console
+- [ ] **Cold start deep link**: `getInitialDeepLink()` returns the correct link
+- [ ] **Warm start deep link**: `onDeepLink()` listener fires when a link is tapped while the app is running
+- [ ] **Custom parameters preserved**: check `deepLink.customParams` matches what you configured
 - [ ] **Deferred deep links work**: uninstall the app on either platform, click link, install, launch, verify `checkDeferredDeepLink()` returns match. A reinstall retests on iOS and on Android
-- [ ] **iOS Universal Links work** — tap a WarpLink URL on a physical iOS device
-- [ ] **Android App Links work** — tap a WarpLink URL on an Android device
-- [ ] **Error handling works** — test with an invalid URL, expired link, and no connectivity
-- [ ] **Old Firebase code fully removed** — no remaining `@react-native-firebase/dynamic-links` imports
-- [ ] **Build succeeds** — clean build with no Firebase Dynamic Links dependencies
+- [ ] **iOS Universal Links work**: tap a WarpLink URL on a physical iOS device
+- [ ] **Android App Links work**: tap a WarpLink URL on an Android device
+- [ ] **Error handling works**: test with an invalid URL, expired link, and no connectivity
+- [ ] **Old Firebase code fully removed**: no remaining `@react-native-firebase/dynamic-links` imports
+- [ ] **Build succeeds**: clean build with no Firebase Dynamic Links dependencies
 
 ## Related Guides
 
-- [Integration Guide](integration-guide.md) — full setup walkthrough
-- [API Reference](api-reference.md) — all public types and methods
-- [Troubleshooting](troubleshooting.md) — common issues after migration
+- [Integration Guide](integration-guide.md): full setup walkthrough
+- [API Reference](api-reference.md): all public types and methods
+- [Troubleshooting](troubleshooting.md): common issues after migration
