@@ -123,7 +123,7 @@ When a user clicks a link before the app is installed:
 ```
 User taps link (app not installed)
     → Edge captures request signals (IP, preferred language, timezone)
-    → Stores signals as a deferred payload (keyed by fingerprint)
+    → Stores signals as a deferred payload (keyed by match key)
     → Redirects user to App Store / Play Store
 
 User installs and opens the app
@@ -137,7 +137,7 @@ User installs and opens the app
     → Server compares device signals against stored click signals
         → IDFV match? → the stored install, with its own match type and confidence
         → Play Install Referrer match? → deterministic (confidence 1.0)
-        → Fingerprint match? → probabilistic (confidence 0.20 to 0.85 before multipliers)
+        → Probabilistic match? → probabilistic (confidence 0.20 to 0.85 before multipliers)
     → Native SDK caches result
     → TypeScript deserializes result → WarpLinkDeepLink (isDeferred: true)
     → App navigates to content

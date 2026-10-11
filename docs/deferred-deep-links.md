@@ -94,20 +94,20 @@ The match confidence depends on the matching method and time elapsed since the c
 |----------|------------|------------|
 | IDFV repeat check (iOS, app was previously installed) | The stored install's own score | The stored install's own type |
 | Play Install Referrer (Android) | 1.0 | `deterministic` |
-| Fingerprint, < 1 hour since click | 0.85 | `probabilistic` |
-| Fingerprint, < 3 hours since click | 0.65 | `probabilistic` |
-| Fingerprint, < 6 hours since click | 0.50 | `probabilistic` |
-| Fingerprint, < 24 hours since click | 0.30 | `probabilistic` |
+| Probabilistic match, < 1 hour since click | 0.85 | `probabilistic` |
+| Probabilistic match, < 3 hours since click | 0.65 | `probabilistic` |
+| Probabilistic match, < 6 hours since click | 0.50 | `probabilistic` |
+| Probabilistic match, < 24 hours since click | 0.30 | `probabilistic` |
 | 24 hours or more since click | no match | none |
 
-The fingerprint rows are the ceilings for the zone-name variant that an SDK
+The probabilistic rows are the ceilings for the zone-name variant that an SDK
 collecting a zone name sends. The offset variant kept for older SDKs scores a band lower (0.80
 down to 0.25), and the language-only fallback lower still (0.70 down to 0.20).
 Two multipliers then reduce whichever ceiling applied: 0.6 when more than one
-claimable click shared the fingerprint, and 0.6 / 0.9 / 1.0 for a
+claimable click shared the match key, and 0.6 / 0.9 / 1.0 for a
 carrier-grade-NAT, household-IPv4, or IPv6 click address.
 
-**Recommendation:** Route to specific content when `matchConfidence` is above 0.5. Show generic onboarding when below 0.5. `matchGuaranteed` is `true` only for a deterministic match; use it to pick the destination, not as a credential, since a probabilistic match is a best guess from a network-shaped fingerprint and can name the wrong user. Authenticate the user and check authorization separately before anything sensitive.
+**Recommendation:** Route to specific content when `matchConfidence` is above 0.5. Show generic onboarding when below 0.5. `matchGuaranteed` is `true` only for a deterministic match; use it to pick the destination, not as a credential, since a probabilistic match is a best guess from a network-shaped match key and can name the wrong user. Authenticate the user and check authorization separately before anything sensitive.
 
 ## Match Window Configuration
 
@@ -118,7 +118,7 @@ hours and cannot exceed 24**; a link created before that ceiling may still carry
 a longer value, but the platform clamps it to 24 hours on read. There is no
 client-side setting to change it.
 
-The window is short on purpose. The fingerprint key is a network, not a device:
+The window is short on purpose. The match key is a network, not a device:
 an IP address, a normalized language, and a timezone. Every phone behind one NAT
 that shares a language and timezone lands in the same bucket, so each extra hour
 lets another stranger join it while adding almost no real matches. It governs the
@@ -133,13 +133,13 @@ probabilistic tier only; the deterministic paths are unaffected.
 ### iOS
 
 - **IDFV repeat check:** IDFV (Identifier for Vendor) recognizes an install asking again when the app was previously installed, and returns that install with its own match type and confidence. It never produces a guaranteed match. No ATT prompt needed.
-- **Probabilistic matching:** Fingerprint (IP + preferred language + timezone, hashed server-side). Used for first-time installs.
+- **Probabilistic matching:** Match key (IP + preferred language + timezone, hashed server-side). Used for first-time installs.
 - **No IDFA.** The SDK does not use IDFA and does not trigger App Tracking Transparency prompts.
 
 ### Android
 
 - **Deterministic matching:** Play Install Referrer. The Play Store passes the click referrer through the install process. This is the most accurate method (confidence 1.0).
-- **Probabilistic fallback:** If Play Install Referrer is unavailable (sideloaded app, Play Services missing), the SDK falls back to fingerprint matching (IP + preferred language + timezone).
+- **Probabilistic fallback:** If Play Install Referrer is unavailable (sideloaded app, Play Services missing), the SDK falls back to probabilistic matching (IP + preferred language + timezone).
 
 ## Code Example with React Navigation
 
@@ -230,9 +230,9 @@ JavaScript:
 
 ### Multiple Links Clicked Before Install
 
-A fingerprint is a network rather than a device, so several clicks can land under
+A match key is a network rather than a device, so several clicks can land under
 one key: your own user clicking twice, or two strangers behind the same NAT. The
-platform keeps them as a list, newest first, up to 10 per fingerprint. A second
+platform keeps them as a list, newest first, up to 10 per match key. A second
 click no longer overwrites the first, so the install that belongs to the earlier
 click can still find it.
 

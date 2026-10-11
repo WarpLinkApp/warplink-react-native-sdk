@@ -24,7 +24,7 @@ Only the Play Install Referrer on Android is deterministic: the referrer names t
 | Requires ATT? | No |
 | Requires user permission? | No |
 
-IDFV is a UUID unique to the combination of your app's vendor and the device. It does not require any user permission and is **exempt from App Tracking Transparency (ATT)**. The SDK includes IDFV in attribution requests automatically. If the server already holds an install for that IDFV, it returns that install with its own match type and confidence, so a fingerprint match stays a fingerprint match. It does not answer a reinstall the SDK reports as one; that install falls through to the fingerprint tier.
+IDFV is a UUID unique to the combination of your app's vendor and the device. It does not require any user permission and is **exempt from App Tracking Transparency (ATT)**. The SDK includes IDFV in attribution requests automatically. If the server already holds an install for that IDFV, it returns that install with its own match type and confidence, so a probabilistic match stays a probabilistic match. It does not answer a reinstall the SDK reports as one; that install falls through to the probabilistic tier.
 
 ### Android: Play Install Referrer
 
@@ -38,9 +38,9 @@ IDFV is a UUID unique to the combination of your app's vendor and the device. It
 | Requires Google Play? | Yes |
 | Requires user permission? | No |
 
-When available, Play Install Referrer provides deterministic attribution with no fingerprint ambiguity. Falls back to probabilistic matching if Play Services is unavailable (sideloaded apps, alternative stores).
+When available, Play Install Referrer provides deterministic attribution with no match key ambiguity. Falls back to probabilistic matching if Play Services is unavailable (sideloaded apps, alternative stores).
 
-## Probabilistic Matching (Enriched Fingerprint)
+## Probabilistic Matching (Enriched Match Key)
 
 **Used for:** First-install attribution when deterministic signals are not available.
 
@@ -52,24 +52,24 @@ When available, Play Install Referrer provides deterministic attribution with no
 | Requires ATT? | No |
 | Requires user permission? | No |
 
-When a user clicks a WarpLink URL, a brief JavaScript interstitial captures request-side signals. On first app launch, the SDK collects the same categories of signals from the device and sends them to the attribution API. The server computes the fingerprint hash from both sets (IP is derived server-side from the request) and checks for a match.
+When a user clicks a WarpLink URL, a brief JavaScript interstitial captures request-side signals. On first app launch, the SDK collects the same categories of signals from the device and sends them to the attribution API. The server computes the match key hash from both sets (IP is derived server-side from the request) and checks for a match.
 
 Since 1.1.0 the native modules send the IANA timezone name (`timezone`, e.g. `America/Toronto`) alongside the minute offset (`timezone_offset`). The zone name carries far more entropy than the offset, roughly 340 zones against roughly 38 offsets, and it does not shift at a daylight-saving boundary, which used to break a click and its install apart when the clocks changed between them. The server prefers the zone name and falls back to the offset for older SDKs.
 
-> **Note:** the fingerprint intentionally excludes User-Agent and screen
+> **Note:** the match key intentionally excludes User-Agent and screen
 > dimensions. They differ between a mobile browser and a native app (browser UA vs
 > app UA; CSS pixels vs iOS points vs Android physical pixels) and never match, so
 > including them only adds noise.
 
 ## App Identity
 
-Every attribution request also carries the host app's identifier: `app_bundle_id` on iOS, `app_package_name` on Android. It is not a fingerprint component and does not affect confidence.
+Every attribution request also carries the host app's identifier: `app_bundle_id` on iOS, `app_package_name` on Android. It is not a match key component and does not affect confidence.
 
 An API key is scoped to your organization, not to a single app. If your organization ships more than one app, this identifier is what lets the server attribute an install to the app it actually happened in. The native modules read it from the app itself (`Bundle.main.bundleIdentifier` and `Context.getPackageName()`), so there is nothing to configure and no JavaScript field to pass.
 
 ### Confidence by Time Window
 
-The elapsed time and the fingerprint variant set the ceiling. `enriched_tz` is the zone-name variant that an SDK collecting a zone name sends; `enriched` is the offset variant kept for older SDKs; `basic` is the language-only key the server tries last.
+The elapsed time and the match key variant set the ceiling. `enriched_tz` is the zone-name variant that an SDK collecting a zone name sends; `enriched` is the offset variant kept for older SDKs; `basic` is the language-only key the server tries last.
 
 | Time Since Click | `enriched_tz` | `enriched` | `basic` |
 |------------------|---------------|------------|---------|
@@ -83,7 +83,7 @@ Confidence decreases over time because IP addresses and network conditions chang
 
 | Condition | Multiplier |
 |-----------|------------|
-| More than one claimable click sat in the fingerprint's bucket | 0.6 |
+| More than one claimable click sat in the match key's bucket | 0.6 |
 | The click's IP was carrier-grade NAT or private | 0.6 |
 | The click's IP was a household IPv4 address | 0.9 |
 | The click's IP was IPv6 | 1.0 |
@@ -92,7 +92,7 @@ Confidence decreases over time because IP addresses and network conditions chang
 
 The match window is server-side, set per link in the dashboard. It **defaults to 6 hours and cannot exceed 24**; a link created before that ceiling may still carry a longer value, but the platform clamps it to 24 hours on read.
 
-The window is short on purpose. The fingerprint key is a network, not a device: an IP address, a normalized language, and a timezone. Every phone behind one NAT that shares a language and timezone lands in the same bucket, so each extra hour lets another stranger join it while adding almost no real matches. This governs the probabilistic tier only. The Play Install Referrer on Android and the IDFV repeat check on iOS read stored data instead of the fingerprint bucket, so the window does not apply to them.
+The window is short on purpose. The match key is a network, not a device: an IP address, a normalized language, and a timezone. Every phone behind one NAT that shares a language and timezone lands in the same bucket, so each extra hour lets another stranger join it while adding almost no real matches. This governs the probabilistic tier only. The Play Install Referrer on Android and the IDFV repeat check on iOS read stored data instead of the match key bucket, so the window does not apply to them.
 
 ## Interpreting Match Results
 
@@ -118,7 +118,7 @@ not be read".
 
 ### `matchGuaranteed` Is Not a Credential
 
-`matchGuaranteed` is `true` only when the match came from a deterministic signal, which is the Play Install Referrer on Android. No first install on iOS is guaranteed, and the IDFV never upgrades a match. Use it, like `matchConfidence`, to pick the destination to route to, not to authenticate the user. A probabilistic match is a best guess drawn from a network-shaped fingerprint, so even a high score can name the wrong user. Authenticate the user and check authorization separately before showing private data or doing anything sensitive, guaranteed match or not.
+`matchGuaranteed` is `true` only when the match came from a deterministic signal, which is the Play Install Referrer on Android. No first install on iOS is guaranteed, and the IDFV never upgrades a match. Use it, like `matchConfidence`, to pick the destination to route to, not to authenticate the user. A probabilistic match is a best guess drawn from a network-shaped match key, so even a high score can name the wrong user. Authenticate the user and check authorization separately before showing private data or doing anything sensitive, guaranteed match or not.
 
 ```tsx
 if (attribution.matchGuaranteed) {
@@ -188,15 +188,15 @@ The WarpLink SDK is designed with privacy as a core principle:
 
 | Signal | Purpose | Platform |
 |--------|---------|----------|
-| Preferred language | Fingerprint component | Both |
-| Timezone name | Fingerprint component | Both |
-| Timezone offset | Fingerprint component (fallback key) | Both |
+| Preferred language | Match key component | Both |
+| Timezone name | Match key component | Both |
+| Timezone offset | Match key component (fallback key) | Both |
 | Reinstall flag (`is_reinstall`) | Routes a returning user back to the content they tapped, and separates reinstalls from first installs afterwards | Both |
 | IDFV | Repeat check (recognizing an install asking again) | iOS only |
 | Play Install Referrer | Deterministic matching (first install) | Android only |
 
-The IP address used in the fingerprint is derived server-side from the request:
-the SDK never sends a precomputed fingerprint or the device's IP.
+The IP address used in the match key is derived server-side from the request:
+the SDK never sends a precomputed match key or the device's IP.
 
 The reinstall flag is retained on the install record, so it outlives the request
 that carried it. Everything else in that table is used for the match and nothing
@@ -229,8 +229,9 @@ contributes.
 ### Data Handling
 
 - Device signals are sent to the WarpLink API over HTTPS
-- Fingerprint data is used solely for attribution matching
+- Match data is used solely for attribution matching
 - No cross-app tracking is performed
+- We use probabilistic matching to restore the tapped link on first launch after install. It uses no advertising ID, and the server keys the pending deep link by an HMAC-SHA256 hash of the IP address, primary language, and time zone. Each tap can be matched only within the app's match window, and pending entries expire automatically. A matched install keeps the hashed key for your plan's data retention period. The raw IP address is not stored. The time zone is used by the enriched variant only (the basic variant uses the IP address and primary language)
 - IDFV is scoped to your vendor. WarpLink cannot use it to track users across different vendors' apps
 - GDPR compliant: only ephemeral device signals are collected for the purpose of attribution
 

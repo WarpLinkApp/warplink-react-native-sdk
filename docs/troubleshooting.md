@@ -242,9 +242,9 @@ Create an SDK key at **API Keys** > **SDK key** in the dashboard and pass it to 
 
 The default match window is 6 hours, and the ceiling is 24 hours. If the user installs the app after the window expires, no match will be found. The match window is server-authoritative: configure it per link in the WarpLink dashboard (the `matchWindowHours` option on `configure()` is accepted for backward compatibility but has no client-side effect).
 
-### Fingerprint mismatch
+### Match key mismatch
 
-The user's network conditions may have changed between clicking the link and installing the app (VPN, different Wi-Fi network, carrier-grade NAT). This reduces fingerprint accuracy.
+The user's network conditions may have changed between clicking the link and installing the app (VPN, different Wi-Fi network, carrier-grade NAT). This reduces match accuracy.
 
 ### Not first launch
 
