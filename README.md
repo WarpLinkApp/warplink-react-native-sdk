@@ -63,7 +63,7 @@ The SDK is **opt-out**: a bare `configure({ apiKey, onLink })` wires cold-start,
 warm-start, and deferred deep links automatically. All three flow into your one
 `onLink` callback. No `useEffect`, no manual subscriptions.
 
-A **background deferred check that fails**, for example on a launch with no network, also reaches `onLink` as a failure. The gate stays open, so the next launch retries by itself, and the error is a report rather than something for the host to act on.
+The deferred check retries on the next launch.
 
 ```tsx
 import { WarpLink } from '@warplink/react-native';
@@ -85,12 +85,6 @@ WarpLink.configure({
 
 That's the whole happy path. `onLink` receives every deep link the app sees.
 
-An exception thrown by your `onLink` propagates out of the promise `configure()`
-returns, so keep the `.catch()`. It matters most on the first launch after an
-install, when `navigate()` can throw because the navigation container has not
-mounted yet. Attribution still runs when that happens, but without a `.catch()`
-the throw surfaces as an unhandled rejection.
-
 ### Getting your SDK key
 
 `apiKey` takes an **SDK key**, created under **Keys** > **SDK keys** in the
@@ -107,8 +101,7 @@ Two native hooks are **required** for deep links to reach the SDK. They are not
 optional.
 
 - **iOS:** your `AppDelegate` must forward incoming URLs to
-  `WarpLinkModule.handleIncomingURL(url)`. Without this, iOS Universal Links are
-  100% broken. See [iOS host hook](docs/integration-guide.md#ios-host-hook). If
+  `WarpLinkModule.handleIncomingURL(url)`, which delivers iOS Universal Links to the SDK. See [iOS host hook](docs/integration-guide.md#ios-host-hook). If
   your app declares a `UIApplicationSceneManifest` and has a `SceneDelegate`
   (the default for a plain Xcode template, and required by Apple for apps
   built with its newer SDKs, which do not launch at all without one), the same
@@ -185,7 +178,7 @@ function App() {
 - **Cross-Platform:** single TypeScript API for both iOS and Android with platform-specific native bridges.
 - **No ATT Required:** uses IDFV on iOS (exempt from App Tracking Transparency). No IDFA, no user prompts.
 - **Debug Logging:** enable with `{ debugLogging: true }` in configure options to trace SDK behavior.
-- **Native SDK version:** `await WarpLink.sdkVersion()` returns the version the native SDK reports, which is what to check when a deep link behaves unexpectedly after an upgrade.
+- **Native SDK version:** `await WarpLink.sdkVersion()` returns the version the native SDK reports.
 - **Attribution completion:** `await WarpLink.isAttributionComplete()` tells you whether the deferred check has definitively finished for this install.
 - **Zero Dependencies:** no third-party runtime dependencies. Only peer dependencies on `react` and `react-native`.
 

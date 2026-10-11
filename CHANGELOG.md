@@ -19,19 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a `WarpLinkError` whose code is `E_SERVER_ERROR`. The JavaScript API does not
   change.
 
-### Clarification
+### Match guarantee
 
-This corrects the 1.1.0 `matchGuaranteed` guidance below. `matchGuaranteed` is
-not a credential. Use it, like a confidence threshold, to pick the destination
-the attribution result routes to. A probabilistic match is a best guess from a
-fingerprint shaped by the network rather than the device, so it can name the
-wrong user. Do not sign anyone in, or show personal data, on this flag.
-Authenticate the user and check authorization separately.
+`matchGuaranteed` is not a credential. Use it, like a confidence threshold, to
+pick the destination the attribution result routes to, and keep sign-in and
+personal data on your own authentication.
 
 On Android, a deterministic match comes from the Play Install Referrer. On iOS,
 the IDFV lookup returns the install the device already has, with that install's
-own match type and confidence. Neither lookup turns a probabilistic match into a
-guaranteed one.
+own match type and confidence.
 
 ## [1.1.0] - 2026-09-15
 
@@ -60,11 +56,10 @@ non-breaking.
 - **`linkDomains` configure option:** declare the hosts that serve your links,
   for example `linkDomains: ['links.yourapp.com']`. Optional and additive. The
   fetched domain list arrives over the network, but a link that opens your app
-  has to be recognized as yours immediately, so on a first launch (or any launch
-  with no network) a custom-domain link used to be handed back to the host app
-  unresolved. Declared domains are known from the first line of `configure()`
-  and are merged with the fetched list. The equivalent no-code declarations are
-  a `WarpLinkDomains` array in `Info.plist` on iOS and an
+  has to be recognized as yours immediately. Declared domains are known from the
+  first line of `configure()`, so custom-domain links resolve on first launch and
+  offline, and they are merged with the fetched list. The equivalent no-code
+  declarations are a `WarpLinkDomains` array in `Info.plist` on iOS and an
   `<meta-data android:name="app.warplink.DOMAINS" android:value="..." />` entry
   in the Android manifest, both read natively; declaring in several places is
   safe. Entries are trimmed, lowercased and reduced to their host natively
@@ -104,27 +99,19 @@ non-breaking.
   `{ error }` event when `onLink` is provided, or rejects the promise when it is
   not.
 - **Attribution signals:** attribution requests stop sending `user_agent` and
-  screen width/height. They never matched between the mobile browser (click) and
-  the native app (install), so they only added noise. The enriched body now
-  carries only `accept_language` and `timezone_offset` (plus the optional
-  `device_id` / IDFV on iOS); the server derives the IP and computes the
-  fingerprint hash.
+  screen width/height. The enriched body carries `accept_language` and
+  `timezone_offset` (plus the optional `device_id` / IDFV on iOS); the server
+  derives the IP and computes the fingerprint hash.
 - **Attribution signals:** the body now also carries `timezone`, the IANA zone
   name (read by the native SDKs this package bridges to), alongside `timezone_offset`. The zone name carries more entropy
   than a raw offset and does not shift at a daylight-saving boundary. The offset
   is still sent, and still used, when the server has no zone name for the click.
 - **Match guarantee:** a resolved link now exposes `matchGuaranteed`. It is
-  `true` only for a deterministic match (a real universal/app link, the install
-  referrer, or a device-id match) and `false` for a probabilistic one. Gate
-  auto-login, personal data, and anything else you cannot safely show the wrong
-  person on this flag, not on the match alone.
-  **Correction:** this guidance was wrong. A device-ID lookup does not make a
-  match deterministic, and `matchGuaranteed` is not a credential. See
-  [1.1.1](#111---2026-10-10).
+  `true` only for a deterministic match (a real universal/app link or the install
+  referrer) and `false` for a probabilistic one.
 - **Match window:** the deferred payload's default lifetime drops from 72 hours
   to 6, with a 24-hour ceiling. The probabilistic tier only. Deterministic
-  matches are unaffected. A deferred link that is claimed more than 24 hours
-  after the click will no longer match.
+  matches are unaffected.
 - **First-launch robustness:** the first-launch marker is split into "attempted"
   vs "completed" and is consumed only on a definitive server response, so an
   offline first launch retries on the next launch. The marker is now scoped to
@@ -143,19 +130,16 @@ non-breaking.
   present on the stored destination. Both were always true of a browser redirect.
   This happens on the server, so there is nothing to configure and no JavaScript
   field to pass.
-- **In-app opens are now recorded as clicks.** An app that opens a link directly
-  through verified App Links or Universal Links previously produced no click.
-  Those opens now appear in analytics, alongside the redirects that reach the
-  link in a browser, and they count toward your plan's click allowance. This is a
-  server-side change, so it applies to 1.0.x hosts too, and there is nothing to
-  configure.
+- **In-app opens are now recorded as clicks.** Links an app opens directly
+  through verified App Links or Universal Links appear in analytics, alongside
+  the redirects that reach the link in a browser, and they count toward your
+  plan's click allowance. This is a server-side change, so it applies to 1.0.x
+  hosts too, and there is nothing to configure.
 
 ### Deprecated
 
-- `matchWindowHours` on `configure()` is now an inert no-op. The match window is
-  server-authoritative (set per link in the dashboard, `match_window_hours`); the
-  option is still accepted for backward compatibility but has no client-side
-  effect.
+- `matchWindowHours` on `configure()` is deprecated and ignored. The match window is
+  server-authoritative (set per link in the dashboard, `match_window_hours`).
 
 ### Removed
 
@@ -164,91 +148,41 @@ non-breaking.
 
 ### Fixed
 
-- **A foreign url between two taps of one link no longer bills the second tap.**
-  An OAuth callback or an unrelated custom scheme reaches the bridge like any
-  other url, and it used to take the dedupe window the instant it arrived,
-  before anything knew what it was. A re-tap of the link tapped just before it
-  then read as a fresh navigation: one tap, two resolves, two tap ids, two
-  clicks. The bridge now asks the native SDK whether an arriving url is a
-  WarpLink link before it records anything, which is what both native SDKs
-  already do for themselves, so a foreign url takes no window, claims no tap,
-  supersedes nothing, and is not resolved at all unless an explicit
-  `onDeepLink()` subscriber asked for every event. Arrivals are handled in the
-  order they arrive, so two taps milliseconds apart still count as one.
-- **An install is no longer stranded by an unusable attribution response.** The
-  deferred check is allowed to run once per install, and any 200 used to spend
-  it, including a match that named no link and carried no destination. The
-  native SDK was right to discard such a response, but it then never asked
-  again, so the install stayed unattributed for good and only a reinstall could
-  clear it. It is now retried on the next launch, while a confirmed no-match
-  still completes the check as before. Fixed in the native SDKs this package
-  bridges to.
-- **A second `configure()` no longer double-dispatches.** When one landed while
-  the automatic cold-start or deferred check was still awaiting native, the
-  abandoned run found the new `onLink` in module state and delivered to it, and
-  the new run then delivered its own. One launch produced two events, with the
-  older result arriving last. Each run is now tagged with the configuration it
-  belongs to and stays silent once superseded, matching the guards the iOS and
-  Android SDKs already had.
-- **Reinstalls are attributed again on iOS.** Earlier iOS versions kept a single
-  first-launch flag in UserDefaults, which a backup restore carries, so a
-  restored install read as "attribution already done" and the deferred check
-  never ran. An iOS reinstall produced no install and no deferred deep link,
-  while the same reinstall on Android produced both. The gate now lives in
-  per-install storage that a delete and a restore from backup both clear, so
-  both platforms behave identically. In the rare case where that storage cannot
-  be written, iOS falls back to UserDefaults, which a restore does carry. Fixed
-  in the native SDKs this package bridges to.
-- On Android, an install upgrading from 1.0.x is attributed rather than
-  skipped. Fixed in the native SDKs this package bridges to. A deferred link
-  is delivered only when the Play install began within the last seven days;
-  an older referrer is attributed and nothing is routed.
-- On iOS, an install upgrading from 1.0.x is now reported as a first install
-  instead of a reinstall of an install that was never recorded. The 1.0.x
-  UserDefaults keys are removed on the first launch of this version, and the
-  1.0.x cached match is not migrated, so `getAttributionResult()` resolves
-  `null` for an upgrading user until their next install. Fixed in the native
+- **Taps count once.** An OAuth callback or an unrelated custom scheme reaches
+  the bridge like any other url. The bridge asks the native SDK whether an
+  arriving url is a WarpLink link before it records anything, which is what both
+  native SDKs already do for themselves, so a foreign url takes no window,
+  claims no tap, supersedes nothing, and is not resolved at all unless an
+  explicit `onDeepLink()` subscriber asked for every event. Arrivals are handled
+  in the order they arrive, so two taps milliseconds apart still count as one.
+- **Attribution retries on the next launch** when the first response carries no
+  usable match. A confirmed no-match completes the check. Fixed in the native
   SDKs this package bridges to.
-- Android attribution requests sent on the install referrer path now carry the
-  device signals too, so a referrer naming a deleted link can still match.
-- `linkDomains` passed as a single string from JavaScript is read as one domain
-  instead of failing `configure()` with `E_SERVER_ERROR`, on Android.
+- **A second `configure()` supersedes the first.** Each run is tagged with its
+  configuration and stays silent once superseded.
+- **Reinstalls are attributed on iOS and Android alike.** The gate lives in
+  per-install storage that a delete and a restore from backup both clear. Fixed
+  in the native SDKs this package bridges to.
+- On Android, an install upgrading from 1.0.x is attributed.
+- On iOS, an install upgrading from 1.0.x is reported as a first install. Fixed
+  in the native SDKs this package bridges to.
+- Android attribution requests on the install referrer path carry the device
+  signals.
+- `linkDomains` accepts a single string or an array on Android.
 - A custom param sent as an explicit JSON null reaches JavaScript as `null`, not
   the string `"null"`, on Android.
 - `checkDeferredDeepLink()` resolves with `null` on both platforms when a
-  reconfigure abandons the check in flight. It used to reject on Android only.
+  reconfigure abandons the check in flight.
 
-- A URL whose path is not exactly one segment is no longer resolved as a link.
-  `https://<your-domain>/blog/hello` used to resolve as slug `blog`, which could
-  open a completely unrelated destination, since a slug can never contain `/`
-  anywhere else in the system. It now fails with `E_INVALID_URL`, so your app can
-  route such a URL itself. Fixed in the native SDKs this package bridges to.
-- **Both native SDK pins now track the current release.** The published 1.0.x
-  line asked for the wrong version on each platform. The podspec requested the
-  iOS SDK `upToNextMajorVersion` from `0.1.0`, a range that stops below `1.0.0`,
-  and the Android dependency stayed on `app.warplink:sdk:1.0.0`. An app on
-  `@warplink/react-native@1.0.2` therefore built against iOS SDK 0.1.0 and
-  Android SDK 1.0.0, and carried none of the native 1.0.1 or 1.0.2 changes,
-  including the iOS privacy manifest added in 1.0.2. Both pins now point at
-  1.1.0.
+- A URL whose path is not exactly one segment fails with `E_INVALID_URL`.
+- **Both native SDK pins point at 1.1.0.**
 - A tapped link that fails on a weak connection is retried by the native SDK
   this bridge is built against. Nothing changes in your JavaScript: one tap is
-  still one `onLink` event, and a failure still arrives as a `WarpLinkError`
-  with `E_NETWORK_ERROR` once the retries are spent.
-- On iOS, a tap arriving after the app was backgrounded long enough for its
-  connection to die is now retried instead of failing outright. Fixed in the
-  native iOS SDK this bridge is built against; nothing changes in your
-  JavaScript beyond the tap now succeeding on the retry instead of surfacing
-  `E_NETWORK_ERROR`.
-- **On iOS, a superseded tap no longer keeps retrying after this layer has
-  moved on.** Every tap resolves through the bridge's one native method, and on
-  Android that call has always cancelled whatever the bridge's own previous
-  call still had on the wire. iOS's bridge did not, so a tap this layer had
-  already stopped waiting on could still succeed on the network afterward and
-  record a click for a link that was never delivered to `onLink`. iOS now
-  cancels the same way Android does. Nothing changes in your JavaScript: a
-  superseded tap's own answer, success or failure, still never reaches
-  `onLink`.
+  still one `onLink` event.
+- On iOS, a tap arriving after the app was backgrounded is retried by the native
+  iOS SDK. Nothing changes in your JavaScript.
+- **iOS and Android cancel a superseded tap the same way.** A superseded tap's
+  own answer, success or failure, never reaches `onLink`.
 
 ## [1.0.2] - 2026-06-26
 
@@ -265,9 +199,7 @@ non-breaking.
 
 ### Fixed
 
-- The requirements table in the README said React Native `>= 0.71.0`.
-  `peerDependencies` has required `>= 0.75.0` since 0.1.1. The README now
-  matches.
+- The README requirements table lists React Native `>= 0.75.0`.
 
 ## [1.0.0] - 2026-06-17
 
@@ -294,13 +226,11 @@ non-breaking.
 
 ### Fixed
 
-- Both native bridges import the module names the SDKs publish. The iOS bridge
-  imported `WarpLinkSDK` and the Android bridge imported `app.warplink.sdk.*`;
-  the published names are `WarpLink` and `app.warplink.*`.
+- Both native bridges import the module names the SDKs publish: `WarpLink` and
+  `app.warplink.*`.
 - `WarpLinkOptions` is built through its initializer on both platforms, in place
   of a mutable-property form on iOS and a `Builder` on Android.
-- `matchType` reaches JavaScript as a string. Both bridges previously passed the
-  native enum through untranslated.
+- `matchType` reaches JavaScript as a string.
 - A rejected promise carries an `E_*` code mapped from the specific SDK error,
   in place of a single fallback code.
 - `addListener` and `removeListeners` are declared on the Android module, which
