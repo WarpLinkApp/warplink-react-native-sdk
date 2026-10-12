@@ -431,7 +431,7 @@ interface WarpLinkDeepLink {
 | `isDeferred` | `boolean` | Whether this deep link was resolved via deferred attribution. |
 | `matchType` | `'deterministic' \| 'probabilistic' \| null` | The type of attribution match. `null` for direct links. |
 | `matchConfidence` | `number \| null` | The confidence score (0.0 to 1.0). `null` for direct links. |
-| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match is a best guess from a network-shaped match key and can name the wrong user. Authenticate the user and check authorization separately before anything sensitive. |
+| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match comes from a hashed match key built from the IP address and language, with time zone when available, so use it to route the user, not to identify them. Authenticate the user and check authorization separately before anything sensitive. |
 
 **Working with `customParams`:**
 
@@ -467,7 +467,7 @@ interface AttributionResult {
 | `linkId` | `string` | The ID of the link that drove the install. |
 | `matchType` | `'deterministic' \| 'probabilistic'` | The type of attribution match. Always present (unlike `WarpLinkDeepLink` where it's nullable). |
 | `matchConfidence` | `number` | Confidence score (0.0 to 1.0). Always present. |
-| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match is a best guess from a network-shaped match key and can name the wrong user. Authenticate the user and check authorization separately before anything sensitive. |
+| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match comes from a hashed match key built from the IP address and language, with time zone when available, so use it to route the user, not to identify them. Authenticate the user and check authorization separately before anything sensitive. |
 | `isDeferred` | `boolean` | Whether this attribution was from a deferred deep link. |
 
 > **Removed in 1.1.0:** the `installId` field. The native serializers never
