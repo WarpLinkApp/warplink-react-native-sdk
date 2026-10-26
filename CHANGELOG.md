@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-25
+
+### Added
+
+- **`WarpLink.redeemInvitation(text)`.** Pass the text a person pasted. It
+  resolves a `WarpLinkDeepLink` when the text is an invitation that matched, and
+  `null` when it is not an invitation. A refused invitation rejects with a
+  `WarpLinkError` (code `E_SERVER_ERROR`) whose message tells the person to open
+  the link again. A network failure rejects once. The native SDK keeps the
+  invitation and tries again on a later launch, a bounded number of times. A
+  resumed invitation is delivered through `getAttributionResult()` and
+  `claimReferral`, not through `onLink`.
+- **`WarpLink.claimReferral(installerId)`.** Claim the referral behind this
+  install for the person who just signed up. It resolves a `ReferralClaimResult`
+  whose `status` is `claimed`, `flagged`, `ignored` or `none`. Status `none` is
+  an answer, not an error. Calling again with the same id returns the same
+  claim.
+- **Evidence fields on `WarpLinkDeepLink` and `AttributionResult`.**
+  `attributionId`, `matchMethod`, `evidenceClass`, `replayState`,
+  `capturedParams` and `tappedAt`. A payload from an older native SDK, or a
+  value this version does not know, reads as `null` (`{}` for `capturedParams`).
+  An unknown value is never read as exact.
+
+### Changed
+
+- **Upgrade note for TypeScript.** `WarpLinkDeepLink` and `AttributionResult`
+  now carry the six evidence fields (`attributionId`, `matchMethod`,
+  `evidenceClass`, `replayState`, `capturedParams`, `tappedAt`) as required
+  properties. Code that only reads these objects needs no change. Code that
+  builds them itself, such as test fixtures and mocks, must set all six, using
+  `null` for the first four and the last, and `{}` for `capturedParams`.
+- The native SDKs this package bridges to are now 1.2.0 on Android and iOS.
+- The package reads no clipboard. The host app passes the pasted text.
+
 ## [1.1.1] - 2026-10-10
 
 ### Changed

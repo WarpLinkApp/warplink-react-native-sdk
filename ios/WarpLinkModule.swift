@@ -254,10 +254,10 @@ public class WarpLinkModule: RCTEventEmitter {
 
   // MARK: - Private Helpers
 
-  private func serializeDeepLink(
+  func serializeDeepLink(
     _ link: WarpLinkDeepLink
   ) -> NSDictionary {
-    return [
+    var payload: [String: Any] = [
       "linkId": link.linkId,
       "destination": link.destination,
       "deepLinkUrl": link.deepLinkUrl as Any,
@@ -270,6 +270,8 @@ public class WarpLinkModule: RCTEventEmitter {
       "matchConfidence": link.matchConfidence as Any,
       "matchGuaranteed": link.matchGuaranteed,
     ]
+    payload.merge(Self.evidenceFields(of: link)) { current, _ in current }
+    return payload as NSDictionary
   }
 
   // Returns nil when the key is absent or is not an array, so the caller can
@@ -290,7 +292,7 @@ public class WarpLinkModule: RCTEventEmitter {
     reject(code, message, nil)
   }
 
-  private func rejectWithWarpLinkError(
+  func rejectWithWarpLinkError(
     _ error: WarpLinkError,
     rejecter reject: RCTPromiseRejectBlock
   ) {

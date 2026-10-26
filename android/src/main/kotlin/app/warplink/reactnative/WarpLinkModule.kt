@@ -205,6 +205,45 @@ class WarpLinkModule(
         }
     }
 
+    /**
+     * Hands pasted text to the native SDK. The native SDK decides whether the
+     * text is an invitation, whether it has expired, and whether to keep it for
+     * a later launch. Resolves null when the text is not an invitation.
+     */
+    @ReactMethod
+    fun redeemInvitation(text: String, promise: Promise) {
+        try {
+            WarpLink.redeemInvitation(text) { result ->
+                result
+                    .onSuccess { link ->
+                        promise.resolve(link?.let { serializeDeepLink(it) })
+                    }
+                    .onFailure { error -> rejectWithError(error, promise) }
+            }
+        } catch (e: Exception) {
+            rejectWithError(e, promise)
+        }
+    }
+
+    /**
+     * Claims the referral behind this install. Status none is an answer, not
+     * an error, so it resolves like any other status.
+     */
+    @ReactMethod
+    fun claimReferral(installerId: String, promise: Promise) {
+        try {
+            WarpLink.claimReferral(installerId) { result ->
+                result
+                    .onSuccess { claim ->
+                        promise.resolve(ReferralSerializer.serializeClaim(claim))
+                    }
+                    .onFailure { error -> rejectWithError(error, promise) }
+            }
+        } catch (e: Exception) {
+            rejectWithError(e, promise)
+        }
+    }
+
     @ReactMethod
     fun isConfigured(promise: Promise) {
         promise.resolve(WarpLink.isConfigured)
@@ -283,6 +322,7 @@ class WarpLinkModule(
             map.putNull("matchConfidence")
         }
         map.putBoolean("matchGuaranteed", link.matchGuaranteed)
+        ReferralSerializer.putEvidence(map, link, ::toWritableMap)
         return map
     }
 

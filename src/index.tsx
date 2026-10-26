@@ -10,3 +10,11 @@ export {
   type DeepLinkEvent,
   type DeepLinkListener,
 } from './types';
+export type {
+  MatchMethod,
+  EvidenceClass,
+  ReplayState,
+  ReferralClaimStatus,
+  ReferralClaimResult,
+  AttributionEvidence,
+} from './referral/referral-types';

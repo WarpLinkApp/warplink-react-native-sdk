@@ -33,4 +33,12 @@ RCT_EXTERN_METHOD(getInitialURL:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(getSdkVersion:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(redeemInvitation:(NSString *)text
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(claimReferral:(NSString *)installerId
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

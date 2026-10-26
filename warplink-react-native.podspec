@@ -39,7 +39,7 @@ Pod::Spec.new do |s|
   # Consumers must enable `use_frameworks! :linkage => :dynamic` in their Podfile.
   spm_dependency(s,
     url: "https://github.com/WarpLinkApp/warplink-ios-sdk.git",
-    requirement: { kind: "upToNextMajorVersion", minimumVersion: "1.1.1" },
+    requirement: { kind: "upToNextMajorVersion", minimumVersion: "1.2.0" },
     products: ["WarpLink"]
   )
 

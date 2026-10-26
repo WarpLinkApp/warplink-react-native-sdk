@@ -18,7 +18,8 @@ TypeScript API (WarpLink.ts)
 
 | Layer | File | Responsibility |
 |-------|------|----------------|
-| Public API | `src/WarpLink.ts` | TypeScript API, input validation, error mapping, event dispatch |
+| Public API | `src/WarpLink.ts` | TypeScript API: the documented facade over the modules below |
+| Automatic path | `src/automatic/` | `configure()` flow, arrival queue, dedupe window, tap ledger, supersession, cold-start and deferred dispatch; each module owns its own state |
 | Types | `src/types.ts` | All TypeScript interfaces, error class, error codes |
 | Native bridge | `src/NativeWarpLink.ts` | NativeModules interface, linking error detection |
 | iOS native | `ios/WarpLinkModule.swift` | Bridges to WarpLink, handles UIApplicationDelegate events |
@@ -95,7 +96,7 @@ User taps WarpLink URL → OS brings app to foreground
     → Android: onNewIntent() fires (requires launchMode="singleTask")
     → Native module emits 'onWarpLinkDeepLink' event with URL
     → NativeEventEmitter delivers event to TypeScript
-    → WarpLink.ts resolves the URL via NativeWarpLink.handleDeepLink(url)
+    → src/automatic/ resolves the URL via NativeWarpLink.handleDeepLink(url)
     → Native SDK resolves the link via API
     → TypeScript deserializes result → WarpLinkDeepLink
     → Dispatches to onLink (and any manual onDeepLink listeners), deduped by URL

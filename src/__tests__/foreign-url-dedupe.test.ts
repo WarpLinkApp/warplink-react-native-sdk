@@ -631,7 +631,7 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
  */
 describe('an unanswered link check cannot wedge the arrival queue (warplink-0csz)', () => {
   /**
-   * Mirrors `CLASSIFY_CEILING_MS` in `src/WarpLink.ts`, which is module
+   * Mirrors `CLASSIFY_CEILING_MS` in `src/automatic/waits.ts`, which is module
    * private. Same arrangement as the 15_000 the warplink-17r7 ceiling tests
    * carry for `SUPERSEDE_WAIT_CEILING_MS`: a constant exported only for a test
    * to read would be a worse trade than one line kept in step.

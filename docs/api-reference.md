@@ -219,6 +219,26 @@ if (attribution) {
 
 ---
 
+#### `redeemInvitation(text)`
+
+```typescript
+redeemInvitation(text: string): Promise<WarpLinkDeepLink | null>
+```
+
+Redeems the invitation in `text`, which the person pasted. The SDK never reads the clipboard. It resolves the matched link, or `null` when the text is not an invitation. A refused invitation rejects with a `WarpLinkError` (code `E_SERVER_ERROR`) whose message says how to open the link again. After a network failure the native SDK keeps the invitation and tries again on a later launch. That later result is delivered through `getAttributionResult()` and `claimReferral`, not through `onLink`.
+
+---
+
+#### `claimReferral(installerId)`
+
+```typescript
+claimReferral(installerId: string): Promise<ReferralClaimResult>
+```
+
+Claims the referral behind this install for the person who just signed up. `installerId` is your own stable id for that person, 1 to 128 characters. Calling again with the same id returns the same claim. A `status` of `none` is an answer, not an error.
+
+---
+
 #### `isConfigured()`
 
 ```typescript
@@ -431,7 +451,7 @@ interface WarpLinkDeepLink {
 | `isDeferred` | `boolean` | Whether this deep link was resolved via deferred attribution. |
 | `matchType` | `'deterministic' \| 'probabilistic' \| null` | The type of attribution match. `null` for direct links. |
 | `matchConfidence` | `number \| null` | The confidence score (0.0 to 1.0). `null` for direct links. |
-| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match comes from a hashed match key built from the IP address and language, with time zone when available, so use it to route the user, not to identify them. Authenticate the user and check authorization separately before anything sensitive. |
+| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match is an estimated match from device signals, so use it to route the user, not to identify them. Authenticate the user and check authorization separately before anything sensitive. |
 
 **Working with `customParams`:**
 
@@ -467,7 +487,7 @@ interface AttributionResult {
 | `linkId` | `string` | The ID of the link that drove the install. |
 | `matchType` | `'deterministic' \| 'probabilistic'` | The type of attribution match. Always present (unlike `WarpLinkDeepLink` where it's nullable). |
 | `matchConfidence` | `number` | Confidence score (0.0 to 1.0). Always present. |
-| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match comes from a hashed match key built from the IP address and language, with time zone when available, so use it to route the user, not to identify them. Authenticate the user and check authorization separately before anything sensitive. |
+| `matchGuaranteed` | `boolean` | `true` only when the match was deterministic. Use it, like `matchConfidence`, to pick the destination to route to, not as a credential: a probabilistic match is an estimated match from device signals, so use it to route the user, not to identify them. Authenticate the user and check authorization separately before anything sensitive. |
 | `isDeferred` | `boolean` | Whether this attribution was from a deferred deep link. |
 
 > **Removed in 1.1.0:** the `installId` field. The native serializers never

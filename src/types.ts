@@ -1,3 +1,5 @@
+import type { AttributionEvidence } from './referral/referral-types';
+
 export const ErrorCodes = {
   E_NOT_CONFIGURED: 'E_NOT_CONFIGURED',
   E_INVALID_API_KEY_FORMAT: 'E_INVALID_API_KEY_FORMAT',
@@ -99,7 +101,7 @@ export interface WarpLinkConfig {
   automaticDeferredDeepLinks?: boolean;
 }
 
-export interface WarpLinkDeepLink {
+export interface WarpLinkDeepLink extends AttributionEvidence {
   linkId: string;
   destination: string;
   deepLinkUrl: string | null;
@@ -110,7 +112,7 @@ export interface WarpLinkDeepLink {
   /**
    * True only when the match was deterministic. Use it, like matchConfidence,
    * to pick the destination to route to, not as a credential. A probabilistic
-   * match comes from a hashed match key built from the IP address and
+   * match is an estimate from device signals, namely the IP address and
    * language, with time zone when available. Use it to route the user, not
    * to identify them. Authenticate the user and check authorization
    * separately before showing private data or doing anything sensitive,
@@ -119,14 +121,14 @@ export interface WarpLinkDeepLink {
   matchGuaranteed: boolean;
 }
 
-export interface AttributionResult {
+export interface AttributionResult extends AttributionEvidence {
   linkId: string;
   matchType: 'deterministic' | 'probabilistic';
   matchConfidence: number;
   /**
    * True only when the match was deterministic. Use it, like matchConfidence,
    * to pick the destination to route to, not as a credential. A probabilistic
-   * match comes from a hashed match key built from the IP address and
+   * match is an estimate from device signals, namely the IP address and
    * language, with time zone when available. Use it to route the user, not
    * to identify them. Authenticate the user and check authorization
    * separately before showing private data or doing anything sensitive,

@@ -64,6 +64,16 @@ const flushPromises = async (turns = 5): Promise<void> => {
   }
 };
 
+// What a payload without the 1.2.0 evidence fields decodes to.
+const NO_EVIDENCE = {
+  attributionId: null,
+  matchMethod: null,
+  evidenceClass: null,
+  replayState: null,
+  capturedParams: {},
+  tappedAt: null,
+};
+
 describe('WarpLink', () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -407,6 +417,7 @@ describe('WarpLink', () => {
       );
 
       expect(result).toEqual({
+        ...NO_EVIDENCE,
         linkId: 'link-123',
         destination: 'https://example.com',
         deepLinkUrl: 'myapp://path',
@@ -447,6 +458,7 @@ describe('WarpLink', () => {
       );
 
       expect(result).toEqual({
+        ...NO_EVIDENCE,
         linkId: 'link-456',
         destination: 'https://example.com',
         deepLinkUrl: null,
@@ -474,6 +486,7 @@ describe('WarpLink', () => {
       const result = await WarpLink.checkDeferredDeepLink();
 
       expect(result).toEqual({
+        ...NO_EVIDENCE,
         linkId: 'link-789',
         destination: 'https://example.com/page',
         deepLinkUrl: 'myapp://deferred',
@@ -820,6 +833,7 @@ describe('WarpLink', () => {
       const result = await WarpLink.checkDeferredDeepLink();
 
       expect(result).toEqual({
+        ...NO_EVIDENCE,
         linkId: '',
         destination: '',
         deepLinkUrl: null,
@@ -949,6 +963,7 @@ describe('WarpLink', () => {
       const result = await WarpLink.getAttributionResult();
 
       expect(result).toEqual({
+        ...NO_EVIDENCE,
         linkId: 'lnk_abc',
         matchType: 'deterministic',
         matchConfidence: 0.95,

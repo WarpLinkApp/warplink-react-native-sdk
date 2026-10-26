@@ -55,6 +55,17 @@ export interface NativeWarpLinkModule {
    * with itself and hide exactly that drift.
    */
   getSdkVersion(): Promise<string>;
+  /**
+   * Hands pasted text to the native referral redeemer. Resolves `null` for
+   * text that is not an invitation. Rejects with a coded error when the
+   * invitation is refused, expired or could not be confirmed yet.
+   */
+  redeemInvitation(text: string): Promise<object | null>;
+  /**
+   * Claims the referral behind this install. Resolves a result map whose
+   * status may be `none`. Rejects only for a key or network failure.
+   */
+  claimReferral(installerId: string): Promise<object>;
 }
 
 export const DEEP_LINK_EVENT = 'onWarpLinkDeepLink';
