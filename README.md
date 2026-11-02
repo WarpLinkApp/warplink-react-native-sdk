@@ -131,6 +131,10 @@ manifest (`app.warplink.DOMAINS`) instead. All sources are merged, so declaring
 in more than one place is safe. See
 [Custom link domains](docs/api-reference.md#custom-link-domains).
 
+### Testing a first install
+
+A `wl_test_` key keeps its attribution state apart from `wl_live_` state on the same device. Use a Test key in debug builds. To test a first install again without deleting the app, call `WarpLink.clearAttribution()` with a Test key. It clears the attribution stored on the device and starts a new check. It does nothing with a live key.
+
 ### Disabling any piece
 
 Each source is independently disable-able. Turn one off and wire it yourself.

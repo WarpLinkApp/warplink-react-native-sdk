@@ -15,6 +15,11 @@ export const ErrorCodes = {
    */
   E_PASSWORD_REQUIRED: 'E_PASSWORD_REQUIRED',
   E_DECODING_ERROR: 'E_DECODING_ERROR',
+  /**
+   * `clearAttribution()` could not delete every stored item, so some
+   * attribution state may remain on the device.
+   */
+  E_STORAGE_ERROR: 'E_STORAGE_ERROR',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

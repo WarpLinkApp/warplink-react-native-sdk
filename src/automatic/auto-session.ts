@@ -15,6 +15,37 @@ let autoOnLink: DeepLinkListener | null = null;
  */
 let autoGeneration = 0;
 
+/** What the running configure() asked for, read by `clearAttribution`. */
+export interface SessionReset {
+  /** The key is a `wl_test_` key: the only kind a reset acts on. */
+  readonly testKey: boolean;
+  /** The automatic deferred check is on, so a reset starts a fresh one. */
+  readonly restartDeferred: boolean;
+}
+
+let sessionReset: SessionReset | null = null;
+
+/**
+ * Counts resets. A deferred dispatch captures it when it starts and stays
+ * silent if a reset has landed since, so a match fetched before the reset
+ * cannot reach `onLink` after it. Separate from the generation on purpose: a
+ * reset must not silence a cold-start link that is still resolving.
+ */
+let resetEpoch = 0;
+
+export function currentResetEpoch(): number {
+  return resetEpoch;
+}
+
+export function currentSessionReset(): SessionReset | null {
+  return sessionReset;
+}
+
+/** Marks every deferred dispatch in flight as stale. */
+export function invalidateDeferredDispatches(): void {
+  resetEpoch += 1;
+}
+
 export function currentGeneration(): number {
   return autoGeneration;
 }
@@ -35,6 +66,7 @@ export function currentSink(generation: number): DeepLinkListener | null {
 export function abandonSession(): void {
   autoGeneration += 1;
   autoOnLink = null;
+  sessionReset = null;
 }
 
 /**
@@ -42,8 +74,12 @@ export function abandonSession(): void {
  * starts is tagged with it and a later configure() invalidates the lot. `onLink`
  * is the sink for that generation, or null when the host wires its own.
  */
-export function beginSession(onLink: DeepLinkListener | null): number {
+export function beginSession(
+  onLink: DeepLinkListener | null,
+  reset: SessionReset
+): number {
   autoGeneration += 1;
+  sessionReset = reset;
   if (onLink) {
     autoOnLink = onLink;
   }

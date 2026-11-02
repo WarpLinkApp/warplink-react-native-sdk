@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-02
+
+### Added
+
+- **`WarpLink.clearAttribution()`.** Forgets this install's attribution so the
+  next first launch can be tested again. It works with a `wl_test_` key and
+  does nothing, resolving normally, with a `wl_live_` key. With a Test key and
+  the automatic deferred check on, a fresh check starts and a match reaches
+  `onLink`.
+- **`E_STORAGE_ERROR`.** A new error code, raised only by
+  `clearAttribution()`, which rejects with it when a stored item could not be
+  deleted. Calling again is safe.
+
+### Changed
+
+- The native SDKs this package bridges to are now 1.3.0 on Android and iOS.
+
 ## [1.2.0] - 2026-10-25
 
 ### Added

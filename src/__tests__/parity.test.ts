@@ -53,9 +53,9 @@ describe('native parity on the public object', () => {
   });
 
   it('sdkVersion reports the version the NATIVE sdk reports', async () => {
-    mockGetSdkVersion.mockResolvedValue('1.2.0');
+    mockGetSdkVersion.mockResolvedValue('1.3.0');
 
-    await expect(WarpLink.sdkVersion()).resolves.toBe('1.2.0');
+    await expect(WarpLink.sdkVersion()).resolves.toBe('1.3.0');
     expect(mockGetSdkVersion).toHaveBeenCalledTimes(1);
   });
 

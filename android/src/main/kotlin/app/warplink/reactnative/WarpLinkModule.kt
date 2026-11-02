@@ -266,6 +266,21 @@ class WarpLinkModule(
     }
 
     @ReactMethod
+    fun clearAttribution(promise: Promise) {
+        WarpLink.clearAttribution()
+            .onSuccess { promise.resolve(null) }
+            .onFailure { error ->
+                // The native SDK reports a stored item it could not delete as a
+                // decoding error with a plain message; here it is the storage code.
+                if (error is WarpLinkError.DecodingError) {
+                    promise.reject("E_STORAGE_ERROR", error.cause?.message ?: error.message, error)
+                } else {
+                    rejectWithError(error, promise)
+                }
+            }
+    }
+
+    @ReactMethod
     fun addListener(eventName: String) {
         // No-op. NativeEventEmitter lifecycle stub.
     }

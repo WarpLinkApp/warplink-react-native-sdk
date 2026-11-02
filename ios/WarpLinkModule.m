@@ -27,6 +27,9 @@ RCT_EXTERN_METHOD(isConfigured:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(isAttributionComplete:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(clearAttribution:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(getInitialURL:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 

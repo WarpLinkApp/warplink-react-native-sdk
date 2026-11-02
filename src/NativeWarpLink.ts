@@ -66,6 +66,14 @@ export interface NativeWarpLinkModule {
    * status may be `none`. Rejects only for a key or network failure.
    */
   claimReferral(installerId: string): Promise<object>;
+  /**
+   * Clears the Test attribution state of the native SDK. A live key makes this
+   * a successful no-op. Rejects with `E_STORAGE_ERROR` when a stored item could
+   * not be deleted, and `E_NOT_CONFIGURED` before `configure`. The bridge runs
+   * the native SDK with its own automatic deferred check off, so the restart
+   * after a reset is the JS layer's.
+   */
+  clearAttribution(): Promise<void>;
 }
 
 export const DEEP_LINK_EVENT = 'onWarpLinkDeepLink';

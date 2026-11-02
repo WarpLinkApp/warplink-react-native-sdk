@@ -10,6 +10,7 @@ import { autoDispatchUrl } from './auto-dispatch';
 import { claimAutoTap } from './tap-ledger';
 
 const API_KEY_PATTERN = /^wl_(live|test)_[a-zA-Z0-9]{32}$/;
+const TEST_KEY_PREFIX = 'wl_test_';
 
 let autoWarmUnsub: (() => void) | null = null;
 
@@ -140,7 +141,10 @@ export function configureSdk(options: WarpLinkConfig): Promise<void> {
 
   // Claim a generation BEFORE any await: everything this call starts is
   // tagged with it, and a later configure() invalidates the lot.
-  const generation = beginSession(options.onLink ?? null);
+  const generation = beginSession(options.onLink ?? null, {
+    testKey: options.apiKey.startsWith(TEST_KEY_PREFIX),
+    restartDeferred: wantDeferred,
+  });
 
   // Register the warm-start listener synchronously so events that arrive
   // during/after native configuration are captured.

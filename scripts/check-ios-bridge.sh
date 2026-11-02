@@ -2,7 +2,7 @@
 # Compile the REAL iOS bridge source against the REAL WarpLink SDK.
 #
 # Why this exists: nothing else compiles ios/WarpLinkModule.swift or
-# ios/WarpLinkModule+Referral.swift. The package's CI runs tsc, eslint, jest and
+# ios/WarpLinkModule+Referral.swift and ios/WarpLinkModule+ClearAttribution.swift. The package's CI runs tsc, eslint, jest and
 # tsup, none of which read Swift, so a bridge that referenced a property the
 # core SDK does not define shipped clean through every check. This catches
 # exactly that: the bridge's use of the WarpLink API.
@@ -30,6 +30,7 @@ SDK_PATH="${WARPLINK_IOS_SDK_PATH:-$(cd "$(dirname "$0")/../../warplink-ios-sdk"
 RN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BRIDGE="$RN_ROOT/ios/WarpLinkModule.swift"
 BRIDGE_REFERRAL="$RN_ROOT/ios/WarpLinkModule+Referral.swift"
+BRIDGE_CLEAR="$RN_ROOT/ios/WarpLinkModule+ClearAttribution.swift"
 BRIDGE_TESTS="$RN_ROOT/ios-tests"
 
 if [ ! -d "$SDK_PATH" ]; then
@@ -74,6 +75,7 @@ EOF
 
 cp "$BRIDGE" "$WORK/Sources/Bridge/WarpLinkModule.swift"
 cp "$BRIDGE_REFERRAL" "$WORK/Sources/Bridge/WarpLinkModule+Referral.swift"
+cp "$BRIDGE_CLEAR" "$WORK/Sources/Bridge/WarpLinkModule+ClearAttribution.swift"
 if [ -d "$BRIDGE_TESTS" ]; then
   cp "$BRIDGE_TESTS"/*.swift "$WORK/Tests/BridgeTests/"
 fi
