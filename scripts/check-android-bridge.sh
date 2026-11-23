@@ -77,7 +77,7 @@ android {
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 dependencies {
-    implementation("app.warplink:sdk:1.4.0")
+    implementation("app.warplink:sdk:1.4.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.test:core:1.7.0")
@@ -334,7 +334,7 @@ dependencies {
     // compileOnly, the way a React Native library consumes React Native: the
     // host app supplies it at runtime.
     compileOnly("com.facebook.react:react-android:$RN_VERSION")
-    implementation("app.warplink:sdk:1.4.0")
+    implementation("app.warplink:sdk:1.4.1")
 }
 EOF
   ( cd "$WORK/real" && ./gradlew :bridge:compileDebugKotlin --rerun-tasks --quiet 2>&1 )

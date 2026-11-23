@@ -1,7 +1,7 @@
 {
   "name": "@warplink/react-native",
-  "version": "1.4.0",
-  "description": "WarpLink deep linking, install attribution, and real-time analytics SDK for React Native",
+  "version": "1.4.1",
+  "description": "WarpLink deep linking, deferred deep linking, install attribution, Tether referral handoff, and real-time analytics SDK for React Native",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
   "types": "lib/typescript/index.d.ts",
@@ -29,8 +29,13 @@
     "react-native",
     "deep-linking",
     "deferred-deep-links",
+    "deferred-deep-linking",
     "warplink",
-    "attribution"
+    "attribution",
+    "install-attribution",
+    "tether",
+    "referral",
+    "clipboard"
   ],
   "repository": {
     "type": "git",
