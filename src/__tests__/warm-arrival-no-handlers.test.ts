@@ -16,14 +16,9 @@ import {
   removeUrlHandler,
   type UrlHandler,
 } from '../automatic/url-handlers';
+import { settleEventLoop, waitFor } from '../../test-utils/wait-for';
 
 const URL_A = 'https://aplnk.to/no-handlers-a';
-
-const flushPromises = async (turns = 8): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
 
 describe('a native event that arrives while no url handler is registered', () => {
   beforeEach(() => {
@@ -34,7 +29,8 @@ describe('a native event that arrives while no url handler is registered', () =>
 
   it('is dropped before it is classified, stamped or resolved', async () => {
     dispatchNativeEvent({ url: URL_A });
-    await flushPromises();
+    // Absence check: a dropped event leaves nothing to wait on.
+    await settleEventLoop();
 
     expect(mockIsWarpLinkUrl).not.toHaveBeenCalled();
     expect(mockHandleDeepLink).not.toHaveBeenCalled();
@@ -42,12 +38,13 @@ describe('a native event that arrives while no url handler is registered', () =>
 
   it('resolves the same url once a handler is registered', async () => {
     dispatchNativeEvent({ url: URL_A });
-    await flushPromises();
+    // Absence check: the first event must be gone before a handler exists, and nothing announces a drop.
+    await settleEventLoop();
 
     const handler: UrlHandler = jest.fn();
     addUrlHandler(handler);
     dispatchNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
     removeUrlHandler(handler);
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(1);

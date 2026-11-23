@@ -2,7 +2,7 @@
 # Compile the REAL iOS bridge source against the REAL WarpLink SDK.
 #
 # Why this exists: nothing else compiles ios/WarpLinkModule.swift or
-# ios/WarpLinkModule+Referral.swift and ios/WarpLinkModule+ClearAttribution.swift. The package's CI runs tsc, eslint, jest and
+# ios/WarpLinkModule+Referral.swift and ios/WarpLinkModule+ClearAttribution.swift. The package's CI runs tsc, oxlint, jest and
 # tsup, none of which read Swift, so a bridge that referenced a property the
 # core SDK does not define shipped clean through every check. This catches
 # exactly that: the bridge's use of the WarpLink API.
@@ -31,6 +31,13 @@ RN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BRIDGE="$RN_ROOT/ios/WarpLinkModule.swift"
 BRIDGE_REFERRAL="$RN_ROOT/ios/WarpLinkModule+Referral.swift"
 BRIDGE_CLEAR="$RN_ROOT/ios/WarpLinkModule+ClearAttribution.swift"
+BRIDGE_SERIALIZATION="$RN_ROOT/ios/WarpLinkModule+Serialization.swift"
+BRIDGE_ERRORS="$RN_ROOT/ios/WarpLinkModule+Errors.swift"
+BRIDGE_CONFIGURE="$RN_ROOT/ios/WarpLinkModule+Configure.swift"
+BRIDGE_STATUS="$RN_ROOT/ios/WarpLinkModule+Status.swift"
+BRIDGE_TETHER="$RN_ROOT/ios/WarpLinkModule+Tether.swift"
+BRIDGE_PASTE_VIEW="$RN_ROOT/ios/WarpLinkPasteButtonView.swift"
+BRIDGE_PASTE_MANAGER="$RN_ROOT/ios/WarpLinkPasteButtonManager.swift"
 BRIDGE_TESTS="$RN_ROOT/ios-tests"
 
 if [ ! -d "$SDK_PATH" ]; then
@@ -71,11 +78,29 @@ open class RCTEventEmitter: NSObject {
     open func stopObserving() {}
     open func sendEvent(withName name: String, body: Any?) {}
 }
+
+public typealias RCTDirectEventBlock = ([AnyHashable: Any]?) -> Void
+
+#if canImport(UIKit)
+import UIKit
+
+open class RCTViewManager: NSObject {
+    open class func requiresMainQueueSetup() -> Bool { false }
+    open func view() -> UIView! { UIView() }
+}
+#endif
 EOF
 
 cp "$BRIDGE" "$WORK/Sources/Bridge/WarpLinkModule.swift"
 cp "$BRIDGE_REFERRAL" "$WORK/Sources/Bridge/WarpLinkModule+Referral.swift"
 cp "$BRIDGE_CLEAR" "$WORK/Sources/Bridge/WarpLinkModule+ClearAttribution.swift"
+cp "$BRIDGE_SERIALIZATION" "$WORK/Sources/Bridge/WarpLinkModule+Serialization.swift"
+cp "$BRIDGE_ERRORS" "$WORK/Sources/Bridge/WarpLinkModule+Errors.swift"
+cp "$BRIDGE_CONFIGURE" "$WORK/Sources/Bridge/WarpLinkModule+Configure.swift"
+cp "$BRIDGE_STATUS" "$WORK/Sources/Bridge/WarpLinkModule+Status.swift"
+cp "$BRIDGE_TETHER" "$WORK/Sources/Bridge/WarpLinkModule+Tether.swift"
+cp "$BRIDGE_PASTE_VIEW" "$WORK/Sources/Bridge/WarpLinkPasteButtonView.swift"
+cp "$BRIDGE_PASTE_MANAGER" "$WORK/Sources/Bridge/WarpLinkPasteButtonManager.swift"
 if [ -d "$BRIDGE_TESTS" ]; then
   cp "$BRIDGE_TESTS"/*.swift "$WORK/Tests/BridgeTests/"
 fi
@@ -83,6 +108,13 @@ fi
 cd "$WORK"
 swift build --target Bridge 2>&1
 echo "iOS bridge compiles against the real WarpLink SDK."
+
+# The paste button is UIKit only, so the macOS build above skips it. Build the
+# whole bridge again for an iOS destination, where those files are compiled.
+echo "Compiling the iOS bridge, paste button included, for the iOS Simulator."
+xcodebuild build -scheme BridgeCompileCheck-Package \
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath "$WORK/plain" -quiet 2>&1
+echo "iOS bridge, paste button included, compiles for the iOS Simulator."
 
 if [ -n "$(ls -A "$WORK/Tests/BridgeTests" 2>/dev/null)" ]; then
   echo "Running the iOS bridge tests."

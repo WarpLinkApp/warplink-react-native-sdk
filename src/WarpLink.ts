@@ -5,13 +5,14 @@ import type {
   DeepLinkListener,
 } from './types';
 import * as attribution from './attribution-api';
-import { claimReferral, redeemInvitation } from './referral/referral-calls';
-import type { ReferralClaimResult } from './referral/referral-types';
+import { referralApi } from './referral/referral-api';
 import { deliverResolved } from './automatic/auto-event';
 import { clearAttributionSdk } from './automatic/clear-attribution';
 import { configureSdk } from './automatic/configure-flow';
 import { subscribeUrlHandler } from './automatic/native-subscription';
 import { getInitialDeepLink, handleDeepLink } from './manual-resolve';
+import { readDeferredCheckStatus, type DeferredCheckStatus } from './status/deferred-status';
+import { tetherApi } from './tether/tether-api';
 
 export const WarpLink = {
   /**
@@ -86,8 +87,8 @@ export const WarpLink = {
   },
 
   /**
-   * Returns install attribution for the current install. A genuine no-match returns `null`; a malformed native payload throws
-   * `E_DECODING_ERROR`.
+   * Returns install attribution for the current install. A genuine no-match
+   * returns `null`; a malformed native payload throws `E_DECODING_ERROR`.
    *
    * @returns Attribution data, or `null` when there is no match.
    * @throws {WarpLinkError} `E_NOT_CONFIGURED` — SDK not initialized.
@@ -123,6 +124,21 @@ export const WarpLink = {
   },
 
   /**
+   * Where the first-launch link check stands, so a skipped check reads
+   * differently from one that found no match. It sends no request and comes
+   * from state stored on the device, so it survives a relaunch.
+   *
+   * `skippedOldInstall` and `stopped` mean no request was or will be sent.
+   * `waiting` carries `retryAt`, in epoch milliseconds. A `wl_test_` key never
+   * reports `waiting`, `skippedOldInstall` or `stopped`.
+   *
+   * @throws {WarpLinkError} `E_DECODING_ERROR` — Malformed native payload.
+   */
+  getDeferredCheckStatus(): Promise<DeferredCheckStatus> {
+    return readDeferredCheckStatus();
+  },
+
+  /**
    * Forgets this install's attribution so the next first launch can be tested
    * again: the cached match, the completed and attempted gates and any held
    * referral invitation. Server records are not deleted.
@@ -140,38 +156,9 @@ export const WarpLink = {
     return clearAttributionSdk();
   },
 
-  /**
-   * Finishes a referral handoff from the text a person pasted.
-   *
-   * Call it with the text from the system paste control the person taps; the
-   * SDK never reads the clipboard. Text that is not an invitation resolves
-   * `null`. A valid invitation resolves the matched link.
-   *
-   * @throws {WarpLinkError} `E_SERVER_ERROR` when the invitation is invalid or
-   *   expired (the message says how to open the link again), or when it could
-   *   not be confirmed yet. After a network failure the native SDK keeps the
-   *   invitation and tries again on a later launch, a bounded number of times.
-   * @throws {WarpLinkError} `E_NOT_CONFIGURED` when the SDK is not configured.
-   */
-  redeemInvitation(text: string): Promise<WarpLinkDeepLink | null> {
-    return redeemInvitation(text);
-  },
+  ...referralApi,
 
-  /**
-   * Claims the referral behind this install for the person who just signed up.
-   *
-   * `installerId` is your own stable id for that person, 1 to 128 characters,
-   * dedicated to WarpLink: never a primary key, an email or other personal
-   * data. Calling again with the same id is safe. Status `none` is an answer,
-   * not an error.
-   *
-   * @throws {WarpLinkError} `E_SERVER_ERROR` for an empty or too long id, or a
-   *   server failure; `E_NETWORK_ERROR`, `E_INVALID_API_KEY` and
-   *   `E_NOT_CONFIGURED` as for the other calls.
-   */
-  claimReferral(installerId: string): Promise<ReferralClaimResult> {
-    return claimReferral(installerId);
-  },
+  ...tetherApi,
 
   isConfigured(): Promise<boolean> {
     return attribution.isConfigured();

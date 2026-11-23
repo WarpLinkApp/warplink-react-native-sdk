@@ -5,6 +5,7 @@ const mockCheckDeferredDeepLink = jest.fn();
 const mockGetAttributionResult = jest.fn();
 const mockIsConfigured = jest.fn();
 const mockIsAttributionComplete = jest.fn();
+const mockGetDeferredCheckStatus = jest.fn();
 const mockGetInitialURL = jest.fn();
 
 type EventHandler = (event: Record<string, unknown>) => void;
@@ -23,6 +24,7 @@ jest.mock('react-native', () => ({
       getAttributionResult: mockGetAttributionResult,
       isConfigured: mockIsConfigured,
       isAttributionComplete: mockIsAttributionComplete,
+      getDeferredCheckStatus: mockGetDeferredCheckStatus,
       getInitialURL: mockGetInitialURL,
     },
   },
@@ -32,9 +34,17 @@ jest.mock('react-native', () => ({
   NativeEventEmitter: mockNativeEventEmitter,
 }));
 
-import { WarpLink } from '../WarpLink';
-import { WarpLinkError, ErrorCodes, type DeepLinkEvent } from '../types';
+import type { DeepLinkEvent } from '../types';
 import { classifyLikeNative } from '../../test-utils/classify-like-native';
+import { settleEventLoop, waitFor } from '../../test-utils/wait-for';
+
+// A repeated configure() with the same key and options is a no-op, so each test
+// loads a fresh copy of the module and its session state. Both come from one
+// registry so the error class is the one the module throws.
+let WarpLink: typeof import('../WarpLink').WarpLink;
+let WarpLinkError: typeof import('../types').WarpLinkError;
+let ErrorCodes: typeof import('../types').ErrorCodes;
+type WarpLinkError = import('../types').WarpLinkError;
 
 const VALID_LIVE_KEY = 'wl_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6';
 const VALID_TEST_KEY = 'wl_test_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6';
@@ -46,23 +56,6 @@ function emitNativeEvent(
   const handler = mockEmitterListeners.get(eventName);
   if (handler) handler(data);
 }
-
-/**
- * Drain the pending promise chain, without a wall clock.
- *
- * The native module is mocked, so nothing here waits on real work: every await
- * in the code under test resolves on a queue turn. `setImmediate` runs after
- * those turns, and repeating it clears a chain where one await schedules the
- * next. A fixed `setTimeout(..., 10)` did the same job by spending 10 ms and
- * assuming that was enough, which is an assumption with no observer: on a
- * loaded machine the assertion could run first and fail for a reason that has
- * nothing to do with the SDK.
- */
-const flushPromises = async (turns = 5): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
 
 // What a payload without the 1.2.0 evidence fields decodes to.
 const NO_EVIDENCE = {
@@ -77,6 +70,9 @@ const NO_EVIDENCE = {
 describe('WarpLink', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    jest.resetModules();
+    ({ WarpLink } = require('../WarpLink') as typeof import('../WarpLink'));
+    ({ WarpLinkError, ErrorCodes } = require('../types') as typeof import('../types'));
     mockIsWarpLinkUrl.mockImplementation(classifyLikeNative);
     mockConfigure.mockResolvedValue(undefined);
     // Default: attribution not yet complete, so the automatic deferred dispatch
@@ -171,7 +167,6 @@ describe('WarpLink', () => {
       const onLink = jest.fn();
 
       await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink });
-      await flushPromises();
 
       // The check ran: that request is what attributes the install.
       expect(mockCheckDeferredDeepLink).toHaveBeenCalledTimes(1);
@@ -1196,7 +1191,6 @@ describe('onDeepLink', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -1217,7 +1211,7 @@ describe('onDeepLink', () => {
       url: 'https://aplnk.to/abc123',
     });
 
-    await flushPromises();
+    await waitFor(() => expect(listener).toHaveBeenCalled());
 
     expect(mockHandleDeepLink).toHaveBeenCalledWith(
       'https://aplnk.to/abc123'
@@ -1240,7 +1234,7 @@ describe('onDeepLink', () => {
       url: 'https://aplnk.to/abc123',
     });
 
-    await flushPromises();
+    await waitFor(() => expect(listener2).toHaveBeenCalled());
 
     expect(listener1).toHaveBeenCalledTimes(1);
     expect(listener2).toHaveBeenCalledTimes(1);
@@ -1257,7 +1251,8 @@ describe('onDeepLink', () => {
       url: 'https://aplnk.to/abc123',
     });
 
-    await flushPromises();
+    // Absence check: with no listener the event is dropped, and nothing announces a drop.
+    await settleEventLoop();
 
     expect(listener).not.toHaveBeenCalled();
   });
@@ -1275,7 +1270,7 @@ describe('onDeepLink', () => {
       url: 'https://aplnk.to/bad',
     });
 
-    await flushPromises();
+    await waitFor(() => expect(listener).toHaveBeenCalled());
 
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1296,7 +1291,7 @@ describe('onDeepLink', () => {
     WarpLinkFresh.onDeepLink(listener);
     emitNativeEvent('onWarpLinkDeepLink', { url: 'myapp://oauth/callback' });
 
-    await flushPromises();
+    await waitFor(() => expect(listener).toHaveBeenCalled());
 
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1336,7 +1331,6 @@ describe('getInitialDeepLink', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -1419,7 +1413,6 @@ describe('deferred deep link lifecycle', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -1476,6 +1469,7 @@ describe('deferred deep link lifecycle', () => {
     // Supersede it while the first check is parked on native.
     await WarpLinkFresh.configure({
       apiKey: VALID_LIVE_KEY,
+      debugLogging: true,
       onLink: (e) => second.push(e),
     });
 
@@ -1563,6 +1557,7 @@ describe('deferred deep link lifecycle', () => {
     // Second launch: attribution already complete -> the cached match must NOT
     // be re-dispatched even though native checkDeferredDeepLink still returns it.
     mockIsAttributionComplete.mockResolvedValue(true);
+    mockGetDeferredCheckStatus.mockResolvedValue({ state: 'matched' });
     const events2: DeepLinkEvent[] = [];
     await WarpLinkFresh.configure({
       apiKey: VALID_LIVE_KEY,
@@ -1611,8 +1606,6 @@ describe('deferred deep link lifecycle', () => {
 describe('opt-out auto-wiring via configure({ onLink })', () => {
   let WarpLinkFresh: typeof WarpLink;
 
-  const flush = () => flushPromises();
-
   beforeEach(() => {
     jest.resetAllMocks();
     mockIsWarpLinkUrl.mockImplementation(classifyLikeNative);
@@ -1632,7 +1625,6 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -1663,7 +1655,7 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
     emitNativeEvent('onWarpLinkDeepLink', {
       url: 'https://aplnk.to/warm',
     });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalled());
 
     expect(mockHandleDeepLink).toHaveBeenCalledWith(
       'https://aplnk.to/warm'
@@ -1710,7 +1702,8 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
     emitNativeEvent('onWarpLinkDeepLink', {
       url: 'https://aplnk.to/dup',
     });
-    await flush();
+    // Absence check: the warm repeat is a duplicate and is dropped, and nothing announces a drop.
+    await settleEventLoop();
 
     const deepLinkCalls = onLink.mock.calls.filter(
       (c) => (c[0] as { deepLink?: unknown }).deepLink != null
@@ -1727,13 +1720,13 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
 
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/repeat' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalledTimes(1));
 
     // Same URL tapped again well after the window: a new navigation, not a
     // cold/warm reconciliation, so it must dispatch again.
     nowSpy.mockReturnValue(3000);
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/repeat' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalledTimes(2));
 
     nowSpy.mockRestore();
 
@@ -1755,12 +1748,12 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
 
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/back' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalledTimes(1));
 
     // Nine seconds backwards, far outside the 1500ms window.
     nowSpy.mockReturnValue(1000);
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/back' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalledTimes(2));
 
     nowSpy.mockRestore();
 
@@ -1778,12 +1771,13 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
 
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/win' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalledTimes(1));
 
     // Guards the fix from overshooting into "never dedupe".
     nowSpy.mockReturnValue(10500);
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/win' });
-    await flush();
+    // Absence check: the repeat is a duplicate and is dropped, and nothing announces a drop.
+    await settleEventLoop();
 
     nowSpy.mockRestore();
 
@@ -1802,9 +1796,9 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
     // The second url arrives after the first has been delivered, as it does in
     // the Android and iOS WL-S02 tests. Two different links that OVERLAP are a
     // supersede, not two navigations: see cross-link-supersede.test.ts.
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalledTimes(1));
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/b' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalledTimes(2));
 
     expect(mockHandleDeepLink).toHaveBeenCalledWith('https://aplnk.to/a');
     expect(mockHandleDeepLink).toHaveBeenCalledWith('https://aplnk.to/b');
@@ -1827,7 +1821,8 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
     emitNativeEvent('onWarpLinkDeepLink', {
       url: 'https://aplnk.to/warm',
     });
-    await flush();
+    // Absence check: with the wiring off the event is ignored, and nothing announces that.
+    await settleEventLoop();
 
     expect(mockGetInitialURL).not.toHaveBeenCalled();
     // No warm handler registered → event resolves nothing.
@@ -1853,7 +1848,7 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/boom' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalled());
 
     const failure = onLink.mock.calls
       .map((c) => (c[0] as DeepLinkEvent).error)
@@ -1885,7 +1880,7 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/secret' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalled());
 
     const failure = onLink.mock.calls
       .map((c) => (c[0] as DeepLinkEvent).error)
@@ -1904,7 +1899,7 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/boom2' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalled());
 
     const failure = onLink.mock.calls
       .map((c) => (c[0] as DeepLinkEvent).error)
@@ -1931,7 +1926,8 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
     // opted out still received warm-start dispatch. Opting out has to stop
     // every automatic entry point, not only the first one.
     emitNativeEvent('onWarpLinkDeepLink', { url });
-    await flush();
+    // Absence check: with the wiring off the event is ignored, and nothing announces that.
+    await settleEventLoop();
 
     const deepLinkCalls = onLink.mock.calls.filter(
       (c) => (c[0] as { deepLink?: unknown }).deepLink != null
@@ -1971,7 +1967,9 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
     emitNativeEvent('onWarpLinkDeepLink', {
       url: 'https://aplnk.to/x',
     });
-    await flush();
+    await waitFor(() => expect(mockCheckDeferredDeepLink).toHaveBeenCalled());
+    // Absence check: with no sink the event is ignored, and nothing announces that.
+    await settleEventLoop();
 
     expect(mockGetInitialURL).not.toHaveBeenCalled();
     expect(mockHandleDeepLink).not.toHaveBeenCalled();
@@ -1995,7 +1993,9 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
     emitNativeEvent('onWarpLinkDeepLink', { url: 'myapp://oauth/callback' });
-    await flush();
+    await waitFor(() => expect(mockIsWarpLinkUrl).toHaveBeenCalledWith('myapp://oauth/callback'));
+    // Absence check: a foreign url is never resolved, so nothing announces that no resolve started.
+    await settleEventLoop();
 
     expect(mockIsWarpLinkUrl).toHaveBeenCalledWith('myapp://oauth/callback');
     expect(mockHandleDeepLink).not.toHaveBeenCalled();
@@ -2022,7 +2022,7 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/warm' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalled());
 
     expect(onLink).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2128,7 +2128,9 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/retried' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalled());
+    // Absence check: a second call would be a JS-side retry, and nothing announces calls that do not happen.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(1);
     expect(onLink).toHaveBeenCalledTimes(1);
@@ -2147,7 +2149,9 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/offline' });
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalled());
+    // Absence check: a second call would be a JS-side retry, and nothing announces calls that do not happen.
+    await settleEventLoop();
 
     // WL-S21 stands. The host still sees a WarpLinkError; the only change is
     // that it now means "failed after the bounded retries".
@@ -2174,8 +2178,9 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink });
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/once' });
-    await flush();
-    await flush();
+    await waitFor(() => expect(onLink).toHaveBeenCalled());
+    // Absence check: a second call would be a JS-side retry, and nothing announces calls that do not happen.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(1);
     expect(onLink).toHaveBeenCalledTimes(1);
@@ -2200,8 +2205,6 @@ describe('opt-out auto-wiring via configure({ onLink })', () => {
 describe('sinkless configure() still attributes the install', () => {
   let WarpLinkFresh: typeof WarpLink;
 
-  const flush = () => flushPromises();
-
   beforeEach(() => {
     jest.resetAllMocks();
     mockIsWarpLinkUrl.mockImplementation(classifyLikeNative);
@@ -2222,23 +2225,23 @@ describe('sinkless configure() still attributes the install', () => {
 
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
 
   it('SPEC-1 a bare configure({ apiKey }) fires the deferred check', async () => {
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY });
-    await flush();
+    // Without a sink the check is not awaited by configure(), so it is observed at the native module.
+    await waitFor(() => expect(mockCheckDeferredDeepLink).toHaveBeenCalledTimes(1));
 
     expect(mockIsAttributionComplete).toHaveBeenCalledTimes(1);
-    expect(mockCheckDeferredDeepLink).toHaveBeenCalledTimes(1);
   });
 
   it('SPEC-2 the deep link wiring stays off without onLink', async () => {
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY });
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/x' });
-    await flush();
+    // Absence check: with no sink the event is ignored, and nothing announces that.
+    await settleEventLoop();
 
     // Cold and warm start really are gated on the sink: with nowhere to
     // deliver, resolving a URL behind the host's back would be wrong.
@@ -2252,13 +2255,10 @@ describe('sinkless configure() still attributes the install', () => {
     // With no sink there is nothing to deliver, so configure() must not wait.
     mockCheckDeferredDeepLink.mockImplementation(() => new Promise(() => {}));
 
-    const outcome = await Promise.race([
-      WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY }).then(() => 'resolved'),
-      flushPromises(20).then(() => 'still-pending'),
-    ]);
+    // A configure() that waited on the check would never resolve, and the test would time out.
+    await expect(WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY })).resolves.toBeUndefined();
 
-    expect(outcome).toBe('resolved');
-    expect(mockCheckDeferredDeepLink).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockCheckDeferredDeepLink).toHaveBeenCalledTimes(1));
   });
 
   it('SPEC-4 automaticDeferredDeepLinks:false still opts out without onLink', async () => {
@@ -2266,7 +2266,8 @@ describe('sinkless configure() still attributes the install', () => {
       apiKey: VALID_LIVE_KEY,
       automaticDeferredDeepLinks: false,
     });
-    await flush();
+    // Absence check: the opt-out starts no check, and nothing announces that none was started.
+    await settleEventLoop();
 
     expect(mockCheckDeferredDeepLink).not.toHaveBeenCalled();
   });
@@ -2275,7 +2276,9 @@ describe('sinkless configure() still attributes the install', () => {
     mockIsAttributionComplete.mockResolvedValue(true);
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY });
-    await flush();
+    await waitFor(() => expect(mockIsAttributionComplete).toHaveBeenCalledTimes(1));
+    // Absence check: a complete attribution starts no check, and nothing announces that none was started.
+    await settleEventLoop();
 
     expect(mockCheckDeferredDeepLink).not.toHaveBeenCalled();
   });
@@ -2291,7 +2294,8 @@ describe('sinkless configure() still attributes the install', () => {
     await expect(
       WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY })
     ).resolves.toBeUndefined();
-    await flushPromises(20);
+    // Absence check: Node reports an unhandled rejection after the turn that raised it, and nothing announces that none came.
+    await settleEventLoop();
 
     process.off('unhandledRejection', onUnhandled);
     expect(unhandled).toEqual([]);
@@ -2316,7 +2320,6 @@ describe('orchestrator behaviours the review found unpinned', () => {
     }));
     jest.isolateModules(() => {
       WarpLinkFresh =
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../WarpLink') as typeof import('../WarpLink')).WarpLink;
     });
   });
@@ -2329,7 +2332,7 @@ describe('orchestrator behaviours the review found unpinned', () => {
     const unsubSecond = WarpLinkFresh.onDeepLink(second);
 
     emitNativeEvent('onWarpLinkDeepLink', { url: 'https://aplnk.to/fan' });
-    await flushPromises();
+    await waitFor(() => expect(second).toHaveBeenCalled());
 
     // One native resolution per event, however many listeners.
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(1);
@@ -2364,7 +2367,6 @@ describe('orchestrator behaviours the review found unpinned', () => {
     mockCheckDeferredDeepLink.mockResolvedValue(null);
 
     await WarpLinkFresh.configure({ apiKey: VALID_LIVE_KEY, onLink: jest.fn() });
-    await flushPromises();
 
     // The at-most-once scenario's platform note: React Native orders these
     // where the natives race them. A user who installs from one link and
@@ -2392,7 +2394,6 @@ describe('NativeWarpLink module not linked', () => {
 
     // Re-import after mock change
     const { default: NativeWarpLink } =
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../NativeWarpLink') as typeof import('../NativeWarpLink');
 
     expect(() => NativeWarpLink.configure({})).toThrow(

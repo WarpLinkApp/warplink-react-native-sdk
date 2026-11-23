@@ -50,6 +50,11 @@ source is independently disable-able via `automaticDeepLinks` /
   ensures the same source URL is never dispatched twice (e.g. via both cold start
   and a warm-start event).
 - Reconfiguring tears down prior auto-wiring first (idempotent).
+- Calling `configure()` again with the same key and the same options keeps the
+  running session. It does not configure the native SDK again, and a new
+  `onLink` replaces the old one. If the first-launch check has not finished and
+  none is running, the call asks the native SDK for one more check, at most
+  once a minute. The native SDK decides whether that sends a request.
 - `linkDomains` is forwarded to the native layer untouched. Normalization
   (trim, lowercase, full URL reduced to its host) happens natively, so the same
   rules apply to domains declared in `Info.plist` or the Android manifest.
@@ -219,13 +224,48 @@ if (attribution) {
 
 ---
 
+#### `getDeferredCheckStatus()`
+
+```typescript
+getDeferredCheckStatus(): Promise<DeferredCheckStatus>
+```
+
+Tells a check the SDK skipped from a check that found no match. It sends no request and comes from state stored on the device, so a relaunch keeps it.
+
+**Returns:** `Promise<DeferredCheckStatus>`, `{ state, retryAt? }`.
+
+| `state` | Meaning |
+|---------|---------|
+| `'notChecked'` | No check has finished and none is running. A failed check whose wait is over reads this too. |
+| `'checking'` | A check is running, or waiting for the app to come on screen. |
+| `'matched'` | The check finished and found a link. |
+| `'noMatch'` | The check finished and found no link. |
+| `'waiting'` | A check failed. No request is sent before `retryAt`, in epoch milliseconds. |
+| `'skippedOldInstall'` | The install is older than 30 days by default, so no request is sent. |
+| `'stopped'` | The SDK gave up, 3 days by default after the first failure. No request is sent. |
+
+A `wl_test_` key never reports `'waiting'`, `'skippedOldInstall'` or `'stopped'`.
+
+**Errors:** `E_DECODING_ERROR` when the native payload is malformed.
+
+**Example:**
+
+```tsx
+const status = await WarpLink.getDeferredCheckStatus();
+if (status.state === 'waiting') {
+  console.log('Next check allowed at', new Date(status.retryAt ?? 0));
+}
+```
+
+---
+
 #### `redeemInvitation(text)`
 
 ```typescript
 redeemInvitation(text: string): Promise<WarpLinkDeepLink | null>
 ```
 
-Redeems the invitation in `text`, which the person pasted. The SDK never reads the clipboard. It resolves the matched link, or `null` when the text is not an invitation. A refused invitation rejects with a `WarpLinkError` (code `E_SERVER_ERROR`) whose message says how to open the link again. After a network failure the native SDK keeps the invitation and tries again on a later launch. That later result is delivered through `getAttributionResult()` and `claimReferral`, not through `onLink`.
+Redeems the invitation in `text`, which the person pasted. This call reads nothing from the clipboard. It resolves the matched link, or `null` when the text is not an invitation. A refused invitation rejects with a `WarpLinkError` (code `E_SERVER_ERROR`) whose message says how to open the link again. After a network failure the native SDK keeps the invitation and tries again on a later launch. That later result is delivered through `getAttributionResult()` and `claimReferral`, not through `onLink`.
 
 ---
 
@@ -348,7 +388,118 @@ useEffect(() => {
 
 ---
 
+#### `readTether()`
+
+```typescript
+readTether(): Promise<TetherReadResult>
+```
+
+Reads the clipboard for a Tether code now. This is the one read the `'onCall'`
+read mode allows. The native SDK decides everything: whether the text is a code,
+the request, and clearing the clipboard once the server accepts a valid code.
+Clipboard text never reaches JavaScript.
+
+On iOS the first read can show the system paste alert. On Android nothing is
+read, and the result is `{ kind: 'noCode', reason: null }`.
+
+**Returns:** `Promise<TetherReadResult>`. A code that led nowhere is a result,
+not an error.
+
+**Errors:**
+
+| Error Code | When |
+|------------|------|
+| `E_NOT_CONFIGURED` | SDK not configured yet |
+| `E_NETWORK_ERROR` | Network request failed |
+| `E_SERVER_ERROR` | API returned a 5xx error |
+
+**Example:**
+
+```tsx
+const result = await WarpLink.readTether();
+if (result.kind === 'matched') {
+  navigateTo(result.link.deepLinkUrl ?? result.link.destination);
+}
+```
+
+A `matched` result is returned to you and is not sent to `onLink`.
+
+---
+
+#### `lastTetherTestReceipt()`
+
+```typescript
+lastTetherTestReceipt(): Promise<string | null>
+```
+
+The receipt the server returned for the last test code (`wl1t_`) in this
+session, or `null`. It is kept in memory only, so it is gone after a restart or
+`clearAttribution()`.
+
+---
+
+#### `<WarpLinkPasteButton />`
+
+The system paste button that reads a Tether code. In the default `'pasteButton'`
+mode this is the only way the clipboard is read: the person taps it, so iOS
+shows no paste alert. The component renders nothing on Android and on iOS below
+16.
+
+```tsx
+import { WarpLinkPasteButton } from '@warplink/react-native';
+
+<WarpLinkPasteButton
+  onResult={(result) => {
+    if (result.kind === 'matched') navigateTo(result.link.destination);
+  }}
+  onError={(error) => console.warn(error.code)}
+/>
+```
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `onResult` | `(result: TetherReadResult) => void` | | Called with the outcome after a tap. |
+| `onError` | `(error: WarpLinkError) => void` | | Called when the read or the request failed. |
+| `style` | `StyleProp<ViewStyle>` | `{ width: 160, height: 44 }` | Layout. Your style is merged over the default size. |
+| `baseBackgroundColor` | `ColorValue` | system | Button fill. |
+| `baseForegroundColor` | `ColorValue` | system | Icon and label color. |
+| `cornerStyle` | `'dynamic' \| 'fixed' \| 'small' \| 'medium' \| 'large' \| 'capsule'` | `'dynamic'` | Corner shape. |
+| `displayMode` | `'iconAndLabel' \| 'iconOnly' \| 'labelOnly'` | `'iconAndLabel'` | What the button shows. |
+
+---
+
 ## Types
+
+### `TetherReadMode`
+
+```typescript
+type TetherReadMode = 'pasteButton' | 'automatic' | 'onCall';
+```
+
+| Mode | When the clipboard is read |
+|------|----------------------------|
+| `'pasteButton'` (default) | Only when the person taps `<WarpLinkPasteButton />`. No paste alert. |
+| `'automatic'` | Once, at the first open. iOS shows its paste alert. |
+| `'onCall'` | Only when your app calls `WarpLink.readTether()`. |
+
+An unknown value falls back to `'pasteButton'`, so a typo never turns a read on.
+Android reads no clipboard in any mode.
+
+### `TetherReadResult`
+
+```typescript
+type TetherReadResult =
+  | { kind: 'matched'; link: WarpLinkDeepLink }
+  | { kind: 'noCode'; reason: TetherMissReason | null }
+  | { kind: 'unusable' }
+  | { kind: 'test'; receipt: string | null };
+```
+
+`noCode` carries the reason when the SDK knows it: `paste_not_allowed`,
+`clipboard_empty`, `in_app_browser`, `expired`, `other_app`, `link_ended` or
+`older_sdk`. `reason` is `null` on Android and for a reason this version does
+not know. `unusable` means the answer could not be read. `test` is the answer
+to a test code (`wl1t_`), which records nothing.
 
 ### `WarpLinkConfig`
 
@@ -364,6 +515,7 @@ interface WarpLinkConfig {
   onLink?: DeepLinkListener;
   automaticDeepLinks?: boolean;
   automaticDeferredDeepLinks?: boolean;
+  tetherReadMode?: TetherReadMode;
 }
 ```
 
@@ -373,6 +525,7 @@ interface WarpLinkConfig {
 | `onLink` | `DeepLinkListener` | No | | Single sink for cold-start, warm-start, AND deferred deep links. Providing it enables the opt-out auto-wiring. Disambiguate deferred results via `deepLink.isDeferred`. Native config failures arrive here as `{ error }`. |
 | `automaticDeepLinks` | `boolean` | No | `true` | Auto-handle cold + warm start through `onLink`. Only applies when `onLink` is set. |
 | `automaticDeferredDeepLinks` | `boolean` | No | `true` | Auto-fire the deferred check from `configure()` and deliver through `onLink`. The check itself runs with or without `onLink`, because it is the install attribution request; `onLink` only decides whether the match is handed back to you. |
+| `tetherReadMode` | `TetherReadMode` | No | `'pasteButton'` | When the SDK reads the clipboard for a Tether code. See [`TetherReadMode`](#tetherreadmode). Applied on iOS only, because Android reads no clipboard. |
 | `apiEndpoint` | `string` | No | `"https://api.warplink.app/v1"` | The API endpoint URL. Override for testing or custom deployments. |
 | `debugLogging` | `boolean` | No | `false` | Enable debug logging in the native console. |
 | `linkDomains` | `string[]` | No | `[]` | Extra hosts that serve your links, on top of `aplnk.to`. Declare your verified custom domain here so links on it resolve on the very first launch and on offline launches. Additive: merged with the domains the SDK fetches. Full URLs are accepted and reduced to their host. See [Custom link domains](#custom-link-domains). |

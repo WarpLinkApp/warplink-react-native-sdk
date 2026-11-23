@@ -5,6 +5,7 @@ const mockCheckDeferredDeepLink = jest.fn();
 const mockGetAttributionResult = jest.fn();
 const mockIsConfigured = jest.fn();
 const mockIsAttributionComplete = jest.fn();
+const mockGetDeferredCheckStatus = jest.fn();
 const mockGetInitialURL = jest.fn();
 
 type EventHandler = (event: Record<string, unknown>) => void;
@@ -23,6 +24,7 @@ jest.mock('react-native', () => ({
       getAttributionResult: mockGetAttributionResult,
       isConfigured: mockIsConfigured,
       isAttributionComplete: mockIsAttributionComplete,
+      getDeferredCheckStatus: mockGetDeferredCheckStatus,
       getInitialURL: mockGetInitialURL,
     },
   },
@@ -35,6 +37,7 @@ jest.mock('react-native', () => ({
 import { ErrorCodes, type DeepLinkEvent } from '../types';
 import { held } from '../../test-utils/held';
 import { classifyLikeNative } from '../../test-utils/classify-like-native';
+import { settleEventLoop, waitFor } from '../../test-utils/wait-for';
 
 /**
  * A tap on a DIFFERENT link supersedes the one in flight, exactly as a re-tap
@@ -109,11 +112,17 @@ function emitNativeEvent(data: Record<string, unknown>): void {
   if (handler) handler(data);
 }
 
-const flushPromises = async (turns = 8): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
+/** The resolve of `url` has reached the native module. */
+const resolveStarted = (url: string) => waitFor(() => expect(mockHandleDeepLink).toHaveBeenCalledWith(url));
+
+/** The url has been handed to the native module to classify. */
+const classificationStarted = (url: string) => waitFor(() => expect(mockIsWarpLinkUrl).toHaveBeenCalledWith(url));
+
+/**
+ * Absence check, run after the deliveries a test expects: a superseded link or a cancellation must
+ * not follow them, and nothing announces a delivery that does not happen.
+ */
+const noFurtherDelivery = settleEventLoop;
 
 /** The rejection the Android native module produces when a newer resolve cancels an older one. */
 function cancellation(message: string): Error & { code: string } {
@@ -138,6 +147,7 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
     mockIsWarpLinkUrl.mockImplementation(classifyLikeNative);
     mockConfigure.mockResolvedValue(undefined);
     mockIsAttributionComplete.mockResolvedValue(true);
+    mockGetDeferredCheckStatus.mockResolvedValue({ state: 'matched' });
     mockGetInitialURL.mockResolvedValue(null);
     mockEmitterListeners = new Map();
     mockNativeEventEmitter.mockImplementation(() => ({
@@ -178,7 +188,8 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     emitNativeEvent({ url: URL_A });
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
+    await noFurtherDelivery();
 
     expect(received(events)).toEqual([`link:${LINK_B.linkId}`]);
   });
@@ -209,9 +220,9 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     emitNativeEvent({ url: URL_A });
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
     inFlightA.resolve?.(LINK_A);
-    await flushPromises();
+    await noFurtherDelivery();
 
     expect(received(events)).toEqual([`link:${LINK_B.linkId}`]);
   });
@@ -233,9 +244,9 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(2));
 
     expect(received(events)).toEqual([
       `link:${LINK_A.linkId}`,
@@ -262,7 +273,7 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     emitNativeEvent({ url: URL_A });
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     expect(received(events)).toEqual([`error:${ErrorCodes.E_NETWORK_ERROR}`]);
   });
@@ -290,9 +301,12 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     emitNativeEvent({ url: URL_A });
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await resolveStarted(URL_A);
+    await classificationStarted(FOREIGN);
     inFlightA.resolve(LINK_A);
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
+    // Absence check: the foreign url must reach no resolve, and nothing announces a resolve that does not start.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).not.toHaveBeenCalledWith(FOREIGN);
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
@@ -325,11 +339,14 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     emitNativeEvent({ url: URL_A });
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await resolveStarted(URL_A);
+    await classificationStarted(FOREIGN);
     inFlightA.resolve(LINK_A);
-    await flushPromises();
+    // The link's answer is taken while the foreign url is still being classified. No call leaves the SDK for it.
+    await settleEventLoop();
     classifyingForeign.resolve(false);
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
+    await noFurtherDelivery();
 
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
   });
@@ -356,11 +373,14 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     emitNativeEvent({ url: URL_A });
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await resolveStarted(URL_B);
+    // Absence check: the older cancellation is withheld until the newer link answers, and nothing announces a withheld event.
+    await settleEventLoop();
     expect(received(events)).toEqual([]);
 
     open.get(URL_B)?.resolve(LINK_B);
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
+    await noFurtherDelivery();
 
     expect(received(events)).toEqual([`link:${LINK_B.linkId}`]);
   });
@@ -380,13 +400,15 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     emitNativeEvent({ url: URL_A });
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await resolveStarted(URL_B);
     open.get(URL_A)?.resolve(LINK_A);
-    await flushPromises();
+    // Absence check: the older link is withheld until the newer one answers, and nothing announces a withheld event.
+    await settleEventLoop();
     expect(received(events)).toEqual([]);
 
     open.get(URL_B)?.resolve(LINK_B);
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
+    await noFurtherDelivery();
 
     expect(received(events)).toEqual([`link:${LINK_B.linkId}`]);
   });
@@ -407,13 +429,13 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     emitNativeEvent({ url: URL_A });
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await resolveStarted(URL_A);
     open.get(URL_A)?.resolve(LINK_A);
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
     emitNativeEvent({ url: URL_C });
-    await flushPromises();
+    await resolveStarted(URL_C);
     open.get(URL_C)?.resolve(LINK_C);
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(2));
 
     expect(open.get(FOREIGN)).toBeUndefined();
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`, `link:${LINK_C.linkId}`]);
@@ -431,14 +453,16 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => first.push(event) });
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await resolveStarted(URL_A);
     await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => second.push(event) });
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await resolveStarted(URL_B);
     open.get(URL_A)?.resolve(LINK_A);
-    await flushPromises();
+    // The older answer is taken before the newer one arrives. No call leaves the SDK for it.
+    await settleEventLoop();
     open.get(URL_B)?.resolve(LINK_B);
-    await flushPromises();
+    await waitFor(() => expect(second).toHaveLength(1));
+    await noFurtherDelivery();
 
     expect(received(first)).toEqual([]);
     expect(received(second)).toEqual([`link:${LINK_B.linkId}`]);
@@ -471,9 +495,11 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
       apiKey: VALID_LIVE_KEY,
       onLink: (event) => log.push(...received([event])),
     }).then(() => log.push('configured'));
-    await flushPromises();
+    await resolveStarted(URL_A);
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await classificationStarted(FOREIGN);
+    // Absence check: the foreign url must reach no resolve, and nothing announces a resolve that does not start.
+    await settleEventLoop();
 
     // The foreign url reached no resolve at all, so the launch link is still
     // the only thing the deferred check is waiting on.
@@ -510,9 +536,11 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
       () => 'resolved',
       (error: unknown) => error
     );
-    await flushPromises();
+    await resolveStarted(URL_A);
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await classificationStarted(FOREIGN);
+    // The foreign url is decided before the launch link answers. No call leaves the SDK for that decision.
+    await settleEventLoop();
     open.get(URL_A)?.resolve(LINK_A);
 
     expect(await outcome).toBe(hostError);
@@ -534,11 +562,12 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
       apiKey: VALID_LIVE_KEY,
       onLink: (event) => events.push(event),
     });
-    await flushPromises();
+    await resolveStarted(URL_A);
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await resolveStarted(URL_B);
     open.get(URL_A)?.resolve(LINK_A);
-    await flushPromises();
+    // The older answer is taken before the newer one arrives. No call leaves the SDK for it.
+    await settleEventLoop();
     open.get(URL_B)?.resolve(LINK_B);
     await configuring;
 
@@ -566,15 +595,15 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
       apiKey: VALID_LIVE_KEY,
       onLink: (event) => events.push(event),
     });
-    await flushPromises();
+    await waitFor(() => expect(mockConfigure).toHaveBeenCalledTimes(1));
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await resolveStarted(URL_B);
     nativeConfigure.resolve();
-    await flushPromises();
+    await resolveStarted(URL_A);
     open.get(URL_A)?.resolve(LINK_A);
-    await flushPromises();
+    // The older answer is taken before the newer one arrives. No call leaves the SDK for it.
+    await settleEventLoop();
     open.get(URL_B)?.resolve(LINK_B);
-    await flushPromises();
     await configuring;
 
     expect(received(events)).toEqual([`link:${LINK_B.linkId}`]);
@@ -591,18 +620,18 @@ describe('a tap on a different link while one is in flight (warplink-y2v9)', () 
 
     await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => first.push(event) });
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await resolveStarted(URL_A);
     mockGetInitialURL.mockResolvedValueOnce(URL_C);
     const configuring = WarpLink.configure({
       apiKey: VALID_LIVE_KEY,
+      debugLogging: true,
       onLink: (event) => second.push(event),
     });
-    await flushPromises();
+    await resolveStarted(URL_C);
     open.get(URL_C)?.resolve(LINK_C);
-    await flushPromises();
     await configuring;
     open.get(URL_A)?.resolve(LINK_A);
-    await flushPromises();
+    await noFurtherDelivery();
 
     expect(received(first)).toEqual([]);
     expect(received(second)).toEqual([`link:${LINK_C.linkId}`]);

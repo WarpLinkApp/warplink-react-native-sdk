@@ -21,6 +21,14 @@ if [ ! -d "$SDK_PATH/sdk" ]; then
   exit 1
 fi
 
+# One build cannot hold two Android Gradle plugin versions, so the check reads
+# the version the SDK's own build declares instead of keeping a copy that drifts.
+AGP_VERSION="$(sed -n 's/.*id("com.android.library") version "\([^"]*\)".*/\1/p' "$SDK_PATH/build.gradle.kts" | head -n 1)"
+if [ -z "$AGP_VERSION" ]; then
+  echo "Could not read the Android Gradle plugin version from $SDK_PATH/build.gradle.kts." >&2
+  exit 1
+fi
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/bridge/src/main/kotlin/react"
@@ -44,9 +52,9 @@ cat > "$WORK/gradle.properties" <<'EOF'
 android.useAndroidX=true
 EOF
 
-cat > "$WORK/build.gradle.kts" <<'EOF'
+cat > "$WORK/build.gradle.kts" <<EOF
 plugins {
-    id("com.android.library") version "9.4.1" apply false
+    id("com.android.library") version "$AGP_VERSION" apply false
 }
 EOF
 
@@ -69,7 +77,7 @@ android {
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 dependencies {
-    implementation("app.warplink:sdk:1.3.0")
+    implementation("app.warplink:sdk:1.4.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.test:core:1.7.0")
@@ -295,9 +303,9 @@ android.useAndroidX=true
 org.gradle.jvmargs=-Xmx2048m
 EOF
 
-cat > "$WORK/real/build.gradle.kts" <<'EOF'
+cat > "$WORK/real/build.gradle.kts" <<EOF
 plugins {
-    id("com.android.library") version "9.4.1" apply false
+    id("com.android.library") version "$AGP_VERSION" apply false
 }
 EOF
 
@@ -326,7 +334,7 @@ dependencies {
     // compileOnly, the way a React Native library consumes React Native: the
     // host app supplies it at runtime.
     compileOnly("com.facebook.react:react-android:$RN_VERSION")
-    implementation("app.warplink:sdk:1.3.0")
+    implementation("app.warplink:sdk:1.4.0")
 }
 EOF
   ( cd "$WORK/real" && ./gradlew :bridge:compileDebugKotlin --rerun-tasks --quiet 2>&1 )

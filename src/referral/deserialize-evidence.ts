@@ -26,8 +26,12 @@ function pick<T extends string>(
   return allowed.find((candidate) => candidate === value) ?? null;
 }
 
+/**
+ * The server names the install referrer match `referrer`, and rows from before
+ * that name carry `android_referrer`. Both read as `android_referrer`.
+ */
 export const deserializeMatchMethod = (value: unknown): MatchMethod | null =>
-  pick(MATCH_METHODS, value);
+  pick(MATCH_METHODS, value === 'referrer' ? 'android_referrer' : value);
 
 export const deserializeReplayState = (value: unknown): ReplayState | null =>
   pick(REPLAY_STATES, value);

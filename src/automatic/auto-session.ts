@@ -1,4 +1,4 @@
-import type { DeepLinkListener } from '../types';
+import type { DeepLinkListener, WarpLinkDeepLink } from '../types';
 
 let autoOnLink: DeepLinkListener | null = null;
 
@@ -41,9 +41,25 @@ export function currentSessionReset(): SessionReset | null {
   return sessionReset;
 }
 
+/**
+ * The last deferred link the sink was given. A Tether code that later resolves
+ * a different link is delivered to the sink again, so the app can replace the
+ * estimate it routed on. Null before any deferred link, and after a reset.
+ */
+let routedDeferred: WarpLinkDeepLink | null = null;
+
+export function noteDeferredRoute(link: WarpLinkDeepLink): void {
+  routedDeferred = link;
+}
+
+export function currentDeferredRoute(): WarpLinkDeepLink | null {
+  return routedDeferred;
+}
+
 /** Marks every deferred dispatch in flight as stale. */
 export function invalidateDeferredDispatches(): void {
   resetEpoch += 1;
+  routedDeferred = null;
 }
 
 export function currentGeneration(): number {
@@ -67,6 +83,14 @@ export function abandonSession(): void {
   autoGeneration += 1;
   autoOnLink = null;
   sessionReset = null;
+  routedDeferred = null;
+}
+
+/** Hands the current generation's results to a newer `onLink`, with no new generation. */
+export function replaceSink(onLink: DeepLinkListener | null): void {
+  if (onLink) {
+    autoOnLink = onLink;
+  }
 }
 
 /**

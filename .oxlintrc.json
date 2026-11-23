@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript"],
+  "jsPlugins": ["../packages/oxlint-config/plugins/warplink.mjs"],
+  "categories": { "correctness": "error" },
+  "ignorePatterns": ["lib/", "node_modules/", "example/"],
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**", "**/test-utils/**"],
+      "rules": {
+        "warplink/no-fixed-wait-in-tests": "error"
+      }
+    }
+  ]
+}

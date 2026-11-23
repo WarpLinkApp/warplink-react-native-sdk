@@ -645,6 +645,27 @@ The SDK detects first launch, performs the attribution request once, and caches 
 
 See [Deferred Deep Links](deferred-deep-links.md) for details on confidence scores and edge cases.
 
+### Optional: Tether handoff
+
+To carry an invitation code from an install page into the app, put the system
+paste button on your first screen. The person taps it, so iOS shows no paste
+alert, and the native SDK redeems the code.
+
+```tsx
+import { WarpLinkPasteButton } from '@warplink/react-native';
+
+<WarpLinkPasteButton
+  onResult={(result) => {
+    if (result.kind === 'matched') navigateTo(result.link.destination);
+  }}
+/>
+```
+
+Two other read modes exist. `configure({ tetherReadMode: 'automatic' })` reads
+once at the first open and shows the iOS paste alert. `'onCall'` reads only when
+you call `await WarpLink.readTether()`. Android reads no clipboard in any mode.
+See the [API Reference](api-reference.md#readtether).
+
 ## Step 10: Create a Test Link
 
 ### Via Dashboard

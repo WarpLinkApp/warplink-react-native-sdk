@@ -188,7 +188,7 @@ function useCheckDeferredDeepLink() {
 - The SDK checks for a deferred deep link only on the first launch.
 - The first-launch marker is split into "attempted" and "completed": it is
   consumed only on a definitive server response. If the first attempt fails
-  (e.g. offline), the check retries on the next launch.
+  (e.g. offline), the check tries again on a later launch, after a wait that grows with each failure.
 - The result (match or no match) is cached by the native SDK once completed.
 - Subsequent calls to `checkDeferredDeepLink()` return that cached result without
   a network request: the same match if one was found, `null` if there was none.
@@ -202,7 +202,7 @@ If the device has no network connectivity on first launch, the check fails with 
 `WarpLinkError` (code `E_NETWORK_ERROR`), surfaced through `onLink` as an
 `{ error }` event (or rejected from a manual `checkDeferredDeepLink()` call). The
 first-launch marker is **not** consumed on a failed attempt, so the check
-automatically retries on the next launch once connectivity is restored.
+automatically tries again on a later launch, after a wait, once connectivity is restored.
 
 **Recommendation:** Handle the error gracefully and show your default
 first-launch experience; the retry happens on its own.

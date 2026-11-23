@@ -150,8 +150,8 @@ User installs and opens the app
 
 The native SDK tracks whether the deferred check has completed for **this
 install**. The marker is split into "attempted" and "completed" and is consumed
-**only** on a definitive server response, so an offline first launch retries on
-the next launch. It is stored where an uninstall and a restore-from-backup both
+**only** on a definitive server response, so an offline first launch tries again on
+a later launch, after a wait. It is stored where an uninstall and a restore-from-backup both
 clear it:
 
 - **iOS:** a file marked as excluded from backup (not UserDefaults, which iCloud

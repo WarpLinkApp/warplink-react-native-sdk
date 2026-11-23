@@ -63,7 +63,7 @@ The SDK is **opt-out**: a bare `configure({ apiKey, onLink })` wires cold-start,
 warm-start, and deferred deep links automatically. All three flow into your one
 `onLink` callback. No `useEffect`, no manual subscriptions.
 
-The deferred check retries on the next launch.
+The deferred check tries again on a later launch, after a wait that grows with each failure.
 
 ```tsx
 import { WarpLink } from '@warplink/react-native';
@@ -179,6 +179,7 @@ function App() {
 - **Universal Link & App Link Handling:** resolve incoming deep links to destinations and custom parameters. See the [Integration Guide](docs/integration-guide.md).
 - **Deferred Deep Links:** route users to specific content even after App Store or Play Store install. See [Deferred Deep Links](docs/deferred-deep-links.md).
 - **Install Attribution:** deterministic and probabilistic matching with confidence scores. See [Attribution](docs/attribution.md).
+- **Tether handoff:** carry an invitation code from the install page into the app. The default `<WarpLinkPasteButton />` reads the clipboard only when the person taps it, with no paste alert. Switch to `tetherReadMode: 'automatic'` or call `WarpLink.readTether()` when you want to control the read. Android reads no clipboard. See the [API Reference](docs/api-reference.md#readtether).
 - **Cross-Platform:** single TypeScript API for both iOS and Android with platform-specific native bridges.
 - **No ATT Required:** uses IDFV on iOS (exempt from App Tracking Transparency). No IDFA, no user prompts.
 - **Debug Logging:** enable with `{ debugLogging: true }` in configure options to trace SDK behavior.

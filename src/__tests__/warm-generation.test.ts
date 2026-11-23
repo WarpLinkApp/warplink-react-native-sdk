@@ -35,6 +35,7 @@ jest.mock('react-native', () => ({
 import { ErrorCodes, type DeepLinkEvent } from '../types';
 import { held } from '../../test-utils/held';
 import { classifyLikeNative } from '../../test-utils/classify-like-native';
+import { settleEventLoop, waitFor } from '../../test-utils/wait-for';
 
 /**
  * A warm tap still resolving when configure() runs again belongs to the
@@ -73,11 +74,8 @@ function emitNativeEvent(data: Record<string, unknown>): void {
   if (handler) handler(data);
 }
 
-const flushPromises = async (turns = 8): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
+/** The tap's resolve has reached the native module, where the test holds it open. */
+const resolveStarted = (url: string) => waitFor(() => expect(mockHandleDeepLink).toHaveBeenCalledWith(url));
 
 function networkError(): Error & { code: string } {
   const error = new Error('Network request failed') as Error & { code: string };
@@ -122,10 +120,11 @@ describe('a warm tap still resolving across configure() (warplink-4uzm)', () => 
 
     await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => first.push(event) });
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
-    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => second.push(event) });
+    await resolveStarted(URL_A);
+    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, debugLogging: true, onLink: (event) => second.push(event) });
     tapA.resolve(LINK_A);
-    await flushPromises();
+    // Absence check: a stale answer is dropped silently, so nothing announces that it was.
+    await settleEventLoop();
 
     expect(received(first)).toEqual([]);
     expect(received(second)).toEqual([]);
@@ -138,10 +137,11 @@ describe('a warm tap still resolving across configure() (warplink-4uzm)', () => 
 
     await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: () => undefined });
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
-    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => second.push(event) });
+    await resolveStarted(URL_A);
+    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, debugLogging: true, onLink: (event) => second.push(event) });
     tapA.reject(networkError());
-    await flushPromises();
+    // Absence check: a stale failure is dropped silently, so nothing announces that it was.
+    await settleEventLoop();
 
     expect(received(second)).toEqual([]);
   });
@@ -158,14 +158,16 @@ describe('a warm tap still resolving across configure() (warplink-4uzm)', () => 
 
     await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: () => undefined });
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await resolveStarted(URL_A);
     mockConfigure.mockImplementationOnce(() => nativeConfigure.promise);
     const configuring = WarpLink.configure({
       apiKey: VALID_LIVE_KEY,
+      debugLogging: true,
       onLink: (event) => second.push(event),
     });
     tapA.resolve(LINK_A);
-    await flushPromises();
+    // Absence check: the old answer must not reach the new sink, and nothing announces that it did not.
+    await settleEventLoop();
     nativeConfigure.resolve();
     await configuring;
 
@@ -196,11 +198,13 @@ describe('a warm tap still resolving across configure() (warplink-4uzm)', () => 
     await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => first.push(event) });
     emitNativeEvent({ url: URL_A });
     emitNativeEvent({ url: 'myapp://oauth/callback' });
-    await flushPromises();
+    await resolveStarted(URL_A);
+    await waitFor(() => expect(mockIsWarpLinkUrl).toHaveBeenCalledWith('myapp://oauth/callback'));
     tapA.resolve(LINK_A);
-    await flushPromises();
-    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => second.push(event) });
-    await flushPromises();
+    await waitFor(() => expect(first).toHaveLength(1));
+    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, debugLogging: true, onLink: (event) => second.push(event) });
+    // Absence check: the foreign url must reach neither sink, and nothing announces that it did not.
+    await settleEventLoop();
 
     expect(mockIsWarpLinkUrl).toHaveBeenCalledWith('myapp://oauth/callback');
     expect(received(first)).toEqual([`link:${LINK_A.linkId}`]);
@@ -214,9 +218,9 @@ describe('a warm tap still resolving across configure() (warplink-4uzm)', () => 
     mockHandleDeepLink.mockResolvedValue(LINK_A);
 
     await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => first.push(event) });
-    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: (event) => second.push(event) });
+    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, debugLogging: true, onLink: (event) => second.push(event) });
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(second).toHaveLength(1));
 
     expect(received(first)).toEqual([]);
     expect(received(second)).toEqual([`link:${LINK_A.linkId}`]);
@@ -234,10 +238,10 @@ describe('a warm tap still resolving across configure() (warplink-4uzm)', () => 
     await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: () => undefined });
     WarpLink.onDeepLink((event) => explicit.push(event));
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
-    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: () => undefined });
+    await resolveStarted(URL_A);
+    await WarpLink.configure({ apiKey: VALID_LIVE_KEY, debugLogging: true, onLink: () => undefined });
     tapA.resolve(LINK_A);
-    await flushPromises();
+    await waitFor(() => expect(explicit).toHaveLength(1));
 
     expect(received(explicit)).toEqual([`link:${LINK_A.linkId}`]);
   });

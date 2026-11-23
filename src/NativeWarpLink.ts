@@ -18,8 +18,7 @@ export interface NativeWarpLinkModule {
    * `AutoLinkHandler.dispatch` returns on `WarpLink.isWarpLinkUri` before
    * `claimLocked`, iOS `open()` returns on `WarpLink.isWarpLinkURL` before
    * `shouldSuppressDuplicate`. Learning it afterwards from an `E_INVALID_URL`
-   * rejection is too late, because the dedupe state has already changed
-   * (warplink-0csz).
+   * rejection is too late, because the dedupe state has already changed.
    *
    * Resolves nothing, claims nothing, touches no network, and never rejects. A
    * string that is not a url at all answers false.
@@ -44,6 +43,12 @@ export interface NativeWarpLinkModule {
    * attributed" is a separate native marker, and it gates nothing.
    */
   isAttributionComplete(): Promise<boolean>;
+  /**
+   * Where the native deferred check stands, read without sending anything.
+   * Resolves `{ state, retryAt? }`, with `retryAt` in epoch milliseconds for
+   * `waiting` only. Before `configure` the state is `notChecked`.
+   */
+  getDeferredCheckStatus(): Promise<object>;
   getInitialURL(): Promise<string | null>;
   /**
    * The version of the NATIVE SDK this bridge is built against, as that SDK
@@ -66,6 +71,14 @@ export interface NativeWarpLinkModule {
    * status may be `none`. Rejects only for a key or network failure.
    */
   claimReferral(installerId: string): Promise<object>;
+  /**
+   * Tether read now. Takes no argument: the native SDK reads the clipboard
+   * (iOS) or reads nothing (Android), so no clipboard text crosses the bridge.
+   * Resolves `{ kind, link | reason | receipt }`.
+   */
+  readTether(): Promise<object>;
+  /** The last test receipt, kept in native memory only. */
+  getTetherTestReceipt(): Promise<string | null>;
   /**
    * Clears the Test attribution state of the native SDK. A live key makes this
    * a successful no-op. Rejects with `E_STORAGE_ERROR` when a stored item could

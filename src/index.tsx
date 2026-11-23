@@ -18,3 +18,15 @@ export type {
   ReferralClaimResult,
   AttributionEvidence,
 } from './referral/referral-types';
+export type { DeferredCheckState, DeferredCheckStatus } from './status/deferred-status';
+export type {
+  TetherReadMode,
+  TetherMissReason,
+  TetherReadResult,
+} from './tether/tether-types';
+export {
+  WarpLinkPasteButton,
+  type WarpLinkPasteButtonProps,
+  type PasteButtonCornerStyle,
+  type PasteButtonDisplayMode,
+} from './tether/WarpLinkPasteButton';

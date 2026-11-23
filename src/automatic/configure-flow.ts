@@ -3,11 +3,21 @@ import { mapNativeError } from '../native-error';
 import { ErrorCodes, WarpLinkError, type WarpLinkConfig } from '../types';
 import { abandonSession, beginSession, currentSink, isCurrentGeneration } from './auto-session';
 import { clearStamp } from './dedupe-stamp';
-import { dispatchDeferredLink } from './deferred-link';
+import { dispatchDeferredLink, retryDeferredLink } from './deferred-link';
+import {
+  configureSignature,
+  forgetLiveConfigure,
+  joinLiveConfigure,
+  liveConfigureFor,
+  ownRun,
+  recordDeferredRun,
+  recordLiveConfigure,
+} from './live-configure';
 import { dispatchColdStartLink } from './launch-link';
 import { subscribeUrlHandler } from './native-subscription';
 import { autoDispatchUrl } from './auto-dispatch';
 import { claimAutoTap } from './tap-ledger';
+import { tetherReadModeWire } from '../tether/read-mode';
 
 const API_KEY_PATTERN = /^wl_(live|test)_[a-zA-Z0-9]{32}$/;
 const TEST_KEY_PREFIX = 'wl_test_';
@@ -44,6 +54,12 @@ function buildNativeConfig(options: WarpLinkConfig): Record<string, unknown> {
   if (options.linkDomains !== undefined) {
     config['linkDomains'] = options.linkDomains;
   }
+  // Sent only when the host chose a mode, like every other optional field. The
+  // native default is the paste button, so omitting it changes nothing. A value
+  // that is not a mode is sent as the paste button, never as a read.
+  if (options.tetherReadMode !== undefined) {
+    config['tetherReadMode'] = tetherReadModeWire(options.tetherReadMode);
+  }
   // matchWindowHours is intentionally NOT forwarded: the match window is
   // server-side (per link in the dashboard) and the native SDKs no longer
   // accept the option. The deprecated config field is kept as a no-op so
@@ -77,6 +93,7 @@ async function configureNative(
     await NativeWarpLink.configure(config);
     return true;
   } catch (error) {
+    forgetLiveConfigure(generation);
     const err = mapNativeError(error);
     const sink = currentSink(generation);
     if (sink) {
@@ -119,7 +136,7 @@ async function finishConfigure(
       if (currentSink(generation)) {
         await dispatchDeferredLink(generation);
       } else {
-        void dispatchDeferredLink(generation);
+        recordDeferredRun(generation, dispatchDeferredLink(generation));
       }
     }
   }
@@ -132,12 +149,19 @@ export function configureSdk(options: WarpLinkConfig): Promise<void> {
     return Promise.resolve();
   }
 
-  // Reset any prior auto-wiring so reconfiguration is clean and idempotent.
-  teardownAutoWiring();
-
   const config = buildNativeConfig(options);
   const wantDeepLinks = options.onLink != null && options.automaticDeepLinks !== false;
   const wantDeferred = options.automaticDeferredDeepLinks !== false;
+
+  // The same key and options again is the session already running.
+  const signature = configureSignature(config, wantDeepLinks, wantDeferred);
+  const running = liveConfigureFor(signature);
+  if (running) {
+    return joinLiveConfigure(running, options.onLink, wantDeferred ? retryDeferredLink : null);
+  }
+
+  // Reset any prior auto-wiring so reconfiguration is clean.
+  teardownAutoWiring();
 
   // Claim a generation BEFORE any await: everything this call starts is
   // tagged with it, and a later configure() invalidates the lot.
@@ -160,5 +184,7 @@ export function configureSdk(options: WarpLinkConfig): Promise<void> {
   // when the url turns out to be foreign, or a duplicate of a warm arrival.
   const coldTap = wantDeepLinks ? claimAutoTap() : null;
 
-  return finishConfigure(config, wantDeepLinks, wantDeferred, generation, coldTap);
+  const settled = finishConfigure(config, wantDeepLinks, wantDeferred, generation, coldTap);
+  recordLiveConfigure(signature, generation, settled);
+  return ownRun(settled);
 }

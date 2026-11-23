@@ -35,6 +35,8 @@ jest.mock('react-native', () => ({
 import { ErrorCodes, type DeepLinkEvent } from '../types';
 import { held } from '../../test-utils/held';
 import { classifyLikeNative } from '../../test-utils/classify-like-native';
+import { FAKE_CLOCK_ONLY, settleEventLoop, waitFor } from '../../test-utils/wait-for';
+import { SUPERSEDE_WAIT_CEILING_MS } from '../automatic/waits';
 
 /**
  * A host's own `handleDeepLink` / `getInitialDeepLink` call resolves through
@@ -85,11 +87,8 @@ function emitNativeEvent(data: Record<string, unknown>): void {
   if (handler) handler(data);
 }
 
-const flushPromises = async (turns = 8): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
+/** The resolve of `url` has reached the native module, where the test holds it open. */
+const resolveStarted = (url: string) => waitFor(() => expect(mockHandleDeepLink).toHaveBeenCalledWith(url));
 
 /** The rejection the Android native module produces when a newer resolve cancels an older one. */
 function cancellation(message: string): Error & { code: string } {
@@ -160,11 +159,11 @@ describe('a manual resolve supersedes the automatic tap it cancels (warplink-17r
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await resolveStarted(URL_A);
 
     const manualResult = await WarpLink.handleDeepLink(URL_B);
-
-    await flushPromises();
+    // Absence check: the cancellation of the superseded tap must never reach onLink, and nothing announces that it did not.
+    await settleEventLoop();
 
     expect(manualResult).toEqual(
       expect.objectContaining({ linkId: LINK_B.linkId })
@@ -194,7 +193,7 @@ describe('a manual resolve supersedes the automatic tap it cancels (warplink-17r
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await resolveStarted(URL_A);
 
     await expect(WarpLink.handleDeepLink(FOREIGN)).rejects.toMatchObject({
       name: 'WarpLinkError',
@@ -202,7 +201,9 @@ describe('a manual resolve supersedes the automatic tap it cancels (warplink-17r
     });
 
     inFlightA.resolve(LINK_A);
-    await flushPromises();
+    await waitFor(() => expect(onLinkEvents).toHaveLength(1));
+    // Absence check: no second event may follow the link, and nothing announces one that does not.
+    await settleEventLoop();
 
     expect(received(onLinkEvents)).toEqual([`link:${LINK_A.linkId}`]);
   });
@@ -235,12 +236,12 @@ describe('a manual resolve supersedes the automatic tap it cancels (warplink-17r
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await resolveStarted(URL_A);
 
     mockGetInitialURL.mockResolvedValueOnce(URL_B);
     const manualResult = await WarpLink.getInitialDeepLink();
-
-    await flushPromises();
+    // Absence check: the cancellation of the superseded tap must never reach onLink, and nothing announces that it did not.
+    await settleEventLoop();
 
     expect(manualResult).toEqual(
       expect.objectContaining({ linkId: LINK_B.linkId })
@@ -288,8 +289,7 @@ describe('a newer tap that never settles cannot block an older tap forever (warp
   });
 
   afterEach(() => {
-    // Scoped to these tests: every other test in this file relies on real
-    // timers for flushPromises' setImmediate loop.
+    // Scoped to these tests: every other test in this file runs on real timers.
     jest.useRealTimers();
   });
 
@@ -300,7 +300,7 @@ describe('a newer tap that never settles cannot block an older tap forever (warp
    * times out, because `isSuperseded` awaits `URL_B`'s tap forever.
    */
   it('delivers an automatic tap once a manual resolve that never settles passes the ceiling', async () => {
-    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    jest.useFakeTimers({ doNotFake: FAKE_CLOCK_ONLY });
     const onLinkEvents: DeepLinkEvent[] = [];
     const inFlightA = held<unknown>();
     mockHandleDeepLink.mockImplementation((url: string) =>
@@ -313,18 +313,19 @@ describe('a newer tap that never settles cannot block an older tap forever (warp
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await resolveStarted(URL_A);
 
     // Never awaited: this native call never answers, on purpose.
     void WarpLink.handleDeepLink(URL_B);
-    await flushPromises();
+    await resolveStarted(URL_B);
 
     inFlightA.resolve(LINK_A);
-    await flushPromises();
+    // Absence check: before the ceiling the older tap waits, and nothing announces that it still waits.
+    await settleEventLoop();
     expect(onLinkEvents).toHaveLength(0);
 
-    jest.advanceTimersByTime(15_000);
-    await flushPromises();
+    await jest.advanceTimersByTimeAsync(SUPERSEDE_WAIT_CEILING_MS);
+    await waitFor(() => expect(onLinkEvents).toHaveLength(1));
 
     expect(received(onLinkEvents)).toEqual([`link:${LINK_A.linkId}`]);
   }, 10_000);
@@ -336,7 +337,7 @@ describe('a newer tap that never settles cannot block an older tap forever (warp
    * the review flagged alongside warplink-17r7.
    */
   it('delivers an older automatic tap once a newer automatic tap that never settles passes the ceiling', async () => {
-    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    jest.useFakeTimers({ doNotFake: FAKE_CLOCK_ONLY });
     const onLinkEvents: DeepLinkEvent[] = [];
     const inFlightA = held<unknown>();
     mockHandleDeepLink.mockImplementation((url: string) =>
@@ -349,16 +350,17 @@ describe('a newer tap that never settles cannot block an older tap forever (warp
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await resolveStarted(URL_A);
     emitNativeEvent({ url: URL_C });
-    await flushPromises();
+    await resolveStarted(URL_C);
 
     inFlightA.resolve(LINK_A);
-    await flushPromises();
+    // Absence check: before the ceiling the older tap waits, and nothing announces that it still waits.
+    await settleEventLoop();
     expect(onLinkEvents).toHaveLength(0);
 
-    jest.advanceTimersByTime(15_000);
-    await flushPromises();
+    await jest.advanceTimersByTimeAsync(SUPERSEDE_WAIT_CEILING_MS);
+    await waitFor(() => expect(onLinkEvents).toHaveLength(1));
 
     expect(received(onLinkEvents)).toEqual([`link:${LINK_A.linkId}`]);
   }, 10_000);

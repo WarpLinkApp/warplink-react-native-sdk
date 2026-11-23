@@ -35,6 +35,7 @@ jest.mock('react-native', () => ({
 import { ErrorCodes, type DeepLinkEvent } from '../types';
 import { held } from '../../test-utils/held';
 import { classifyLikeNative } from '../../test-utils/classify-like-native';
+import { settleEventLoop, waitFor } from '../../test-utils/wait-for';
 
 /**
  * A re-tap of the same url inside the dedupe window, after the FIRST tap's
@@ -81,12 +82,6 @@ function emitNativeEvent(data: Record<string, unknown>): void {
   const handler = mockEmitterListeners.get('onWarpLinkDeepLink');
   if (handler) handler(data);
 }
-
-const flushPromises = async (turns = 8): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
 
 /** Any rejection the native module produces, by code. */
 function nativeError(code: string, message: string): Error & { code: string } {
@@ -144,12 +139,12 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     // 800ms later, well inside the 1500ms dedupe window.
     nowSpy.mockReturnValue(1800);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(2));
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(2);
     expect(received(events)).toEqual([
@@ -173,11 +168,12 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     nowSpy.mockReturnValue(1800);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    // Absence check: the re-tap is a duplicate and is dropped before the native module, so nothing announces it.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(1);
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
@@ -207,11 +203,13 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     });
 
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await waitFor(() => expect(mockIsWarpLinkUrl).toHaveBeenCalledTimes(1));
 
     nowSpy.mockReturnValue(1800);
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await waitFor(() => expect(mockIsWarpLinkUrl).toHaveBeenCalledTimes(2));
+    // Absence check: a foreign url is never resolved, so nothing announces that no resolve started.
+    await settleEventLoop();
 
     expect(mockIsWarpLinkUrl).toHaveBeenCalledWith(FOREIGN);
     expect(mockHandleDeepLink).not.toHaveBeenCalled();
@@ -219,7 +217,7 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     // Nothing was stamped, so the real link tapped next is a first arrival.
     nowSpy.mockReturnValue(1900);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(mockHandleDeepLink).toHaveBeenCalledTimes(1));
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(1);
   });
@@ -243,20 +241,22 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(mockHandleDeepLink).toHaveBeenCalledWith(URL_A));
 
     nowSpy.mockReturnValue(1500);
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await waitFor(() => expect(mockHandleDeepLink).toHaveBeenCalledWith(URL_B));
 
     // A's failure arrives after B has already claimed the stamp.
     inFlightA.reject(nativeError(ErrorCodes.E_NETWORK_ERROR, 'offline'));
-    await flushPromises();
+    // Absence check: the superseded failure delivers nothing, so no event marks that it was handled.
+    await settleEventLoop();
 
     // Still inside B's own dedupe window: a repeat of B must stay suppressed.
     nowSpy.mockReturnValue(1600);
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    // Absence check: the repeat is dropped before the native module, so nothing announces it.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(2);
   });
@@ -278,7 +278,9 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     });
 
     emitNativeEvent({ url: TEST_ADDRESS });
-    await flushPromises(20);
+    await waitFor(() => expect(events).toHaveLength(1));
+    // Absence check: a retry loop would show as more calls, and nothing announces calls that do not happen.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(1);
     expect(mockHandleDeepLink).toHaveBeenCalledWith(TEST_ADDRESS);
@@ -287,7 +289,9 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     // The failure drops its stamp, so the person tapping it again gets a fresh answer, once.
     nowSpy.mockReturnValue(1800);
     emitNativeEvent({ url: TEST_ADDRESS });
-    await flushPromises(20);
+    await waitFor(() => expect(events).toHaveLength(2));
+    // Absence check: a retry loop would show as more calls, and nothing announces calls that do not happen.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(2);
     expect(received(events)).toEqual([
@@ -311,9 +315,9 @@ describe('a re-tap after a failed resolve (warplink-l2vc)', () => {
     });
 
     emitNativeEvent({ url: TEST_ADDRESS });
-    await flushPromises(20);
+    await waitFor(() => expect(events).toHaveLength(1));
     emitNativeEvent({ url: URL_A });
-    await flushPromises(20);
+    await waitFor(() => expect(events).toHaveLength(2));
 
     expect(received(events)).toEqual([`error:${ErrorCodes.E_LINK_NOT_FOUND}`, `link:${LINK_A.linkId}`]);
   });

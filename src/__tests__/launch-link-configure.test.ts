@@ -31,6 +31,7 @@ jest.mock('react-native', () => ({
 }));
 
 import { ErrorCodes, type DeepLinkEvent } from '../types';
+import { settleEventLoop, waitFor } from '../../test-utils/wait-for';
 
 /**
  * A launch link belongs to the configure() its answer arrived under
@@ -97,11 +98,19 @@ function emitNativeEvent(data: Record<string, unknown>): void {
   if (handler) handler(data);
 }
 
-const flushPromises = async (turns = 8): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
+/** The resolve of `url` has reached the native module, where `heldResolves` keeps it open. */
+const resolveStarted = (open: Map<string, unknown>, url: string) =>
+  waitFor(() => expect(open.has(url)).toBe(true));
+
+/** The second configure() has reached the native module. */
+const reconfigureStarted = () => waitFor(() => expect(mockConfigure).toHaveBeenCalledTimes(2));
+
+/**
+ * A launch link whose answer has arrived now waits on a newer tap that is still resolving. No call
+ * leaves the SDK at that point, so nothing can be observed: the answer's promise reactions are
+ * allowed to run, and nothing else is.
+ */
+const launchLinkWaitsOnNewerTap = settleEventLoop;
 
 function invalidUrl(): Error & { code: string } {
   const error = new Error('Invalid URL') as Error & { code: string };
@@ -147,16 +156,17 @@ describe('a launch link across a second configure() (warplink-5q3f)', () => {
       apiKey: VALID_LIVE_KEY,
       onLink: (event) => first.push(event),
     });
-    await flushPromises();
+    await resolveStarted(open, URL_A);
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await resolveStarted(open, FOREIGN);
     open.get(URL_A)?.resolve(LINK_A);
-    await flushPromises();
+    await launchLinkWaitsOnNewerTap();
     const reconfiguring = WarpLink.configure({
       apiKey: VALID_LIVE_KEY,
+      debugLogging: true,
       onLink: (event) => second.push(event),
     });
-    await flushPromises();
+    await reconfigureStarted();
     open.get(FOREIGN)?.reject(invalidUrl());
     await Promise.all([configuring, reconfiguring]);
 
@@ -182,13 +192,13 @@ describe('a launch link across a second configure() (warplink-5q3f)', () => {
       () => 'resolved',
       (error: unknown) => error
     );
-    await flushPromises();
+    await resolveStarted(open, URL_A);
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await resolveStarted(open, FOREIGN);
     open.get(URL_A)?.resolve(LINK_A);
-    await flushPromises();
-    const reconfiguring = WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: () => undefined });
-    await flushPromises();
+    await launchLinkWaitsOnNewerTap();
+    const reconfiguring = WarpLink.configure({ apiKey: VALID_LIVE_KEY, debugLogging: true, onLink: () => undefined });
+    await reconfigureStarted();
     open.get(FOREIGN)?.reject(invalidUrl());
     await reconfiguring;
 
@@ -211,12 +221,13 @@ describe('a launch link across a second configure() (warplink-5q3f)', () => {
       apiKey: VALID_LIVE_KEY,
       onLink: (event) => first.push(event),
     });
-    await flushPromises();
+    await resolveStarted(open, URL_A);
     const reconfiguring = WarpLink.configure({
       apiKey: VALID_LIVE_KEY,
+      debugLogging: true,
       onLink: (event) => second.push(event),
     });
-    await flushPromises();
+    await reconfigureStarted();
     open.get(URL_A)?.resolve(LINK_A);
     await Promise.all([configuring, reconfiguring]);
 
@@ -234,13 +245,13 @@ describe('a launch link across a second configure() (warplink-5q3f)', () => {
       apiKey: VALID_LIVE_KEY,
       onLink: (event) => first.push(event),
     });
-    await flushPromises();
+    await resolveStarted(open, URL_A);
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await resolveStarted(open, URL_B);
     open.get(URL_A)?.resolve(LINK_A);
-    await flushPromises();
-    const reconfiguring = WarpLink.configure({ apiKey: VALID_LIVE_KEY, onLink: () => undefined });
-    await flushPromises();
+    await launchLinkWaitsOnNewerTap();
+    const reconfiguring = WarpLink.configure({ apiKey: VALID_LIVE_KEY, debugLogging: true, onLink: () => undefined });
+    await reconfigureStarted();
     open.get(URL_B)?.resolve(LINK_B);
     await Promise.all([configuring, reconfiguring]);
 

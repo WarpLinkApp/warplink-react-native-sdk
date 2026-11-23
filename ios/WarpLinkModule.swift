@@ -71,19 +71,6 @@ public class WarpLinkModule: RCTEventEmitter {
     )
   }
 
-  /**
-   * The native SDK's own version string, not the npm package's.
-   *
-   * This bridge pins its native SDKs by hand, and the pin has drifted before,
-   * so a host has to be able to ask what it is actually running.
-   */
-  @objc func getSdkVersion(
-    _ resolve: @escaping RCTPromiseResolveBlock,
-    rejecter reject: @escaping RCTPromiseRejectBlock
-  ) {
-    resolve(WarpLink.sdkVersion)
-  }
-
   @objc func getInitialURL(
     _ resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
@@ -101,39 +88,6 @@ public class WarpLinkModule: RCTEventEmitter {
     let url = pendingURL
     pendingURL = nil
     return url
-  }
-
-  @objc func configure(
-    _ config: NSDictionary,
-    resolver resolve: @escaping RCTPromiseResolveBlock,
-    rejecter reject: @escaping RCTPromiseRejectBlock
-  ) {
-    guard let apiKey = config["apiKey"] as? String else {
-      rejectWithError(
-        code: "E_INVALID_API_KEY_FORMAT",
-        message: "apiKey is required",
-        rejecter: reject
-      )
-      return
-    }
-
-    let defaults = WarpLinkOptions()
-    let options = WarpLinkOptions(
-      apiEndpoint: (config["apiEndpoint"] as? String) ?? defaults.apiEndpoint,
-      debugLogging: (config["debugLogging"] as? Bool) ?? defaults.debugLogging,
-      // The React Native layer owns all cold/warm/deferred dispatch, so the core
-      // is opted out of its automatic handling to avoid a double-fire (the TS
-      // orchestrator calls getInitialURL / checkDeferredDeepLink itself).
-      autoDeepLinkHandling: false,
-      autoDeferredCheck: false,
-      // Host-declared custom link domains, passed through untouched. The core
-      // normalizes them and unions them with the Info.plist list and the server
-      // list, so JavaScript never has to.
-      linkDomains: Self.stringArray(config["linkDomains"]) ?? defaults.linkDomains
-    )
-
-    WarpLink.configure(apiKey: apiKey, options: options)
-    resolve(nil)
   }
 
   /**
@@ -235,85 +189,6 @@ public class WarpLinkModule: RCTEventEmitter {
       resolve(serializeDeepLink(attribution))
     } else {
       resolve(nil)
-    }
-  }
-
-  @objc func isConfigured(
-    _ resolve: @escaping RCTPromiseResolveBlock,
-    rejecter reject: @escaping RCTPromiseRejectBlock
-  ) {
-    resolve(WarpLink.isConfigured)
-  }
-
-  @objc func isAttributionComplete(
-    _ resolve: @escaping RCTPromiseResolveBlock,
-    rejecter reject: @escaping RCTPromiseRejectBlock
-  ) {
-    resolve(WarpLink.isAttributionComplete)
-  }
-
-  // MARK: - Private Helpers
-
-  func serializeDeepLink(
-    _ link: WarpLinkDeepLink
-  ) -> NSDictionary {
-    var payload: [String: Any] = [
-      "linkId": link.linkId,
-      "destination": link.destination,
-      "deepLinkUrl": link.deepLinkUrl as Any,
-      // Lower [String: JSONValue] to a Foundation object graph; the JSONValue
-      // enum is not Objective-C representable and would otherwise reach JS as
-      // opaque boxes (dropping customParams).
-      "customParams": link.customParams.mapValues { $0.foundationValue },
-      "isDeferred": link.isDeferred,
-      "matchType": link.matchType?.rawValue as Any,
-      "matchConfidence": link.matchConfidence as Any,
-      "matchGuaranteed": link.matchGuaranteed,
-    ]
-    payload.merge(Self.evidenceFields(of: link)) { current, _ in current }
-    return payload as NSDictionary
-  }
-
-  // Returns nil when the key is absent or is not an array, so the caller can
-  // fall back to the SDK default. TypeScript types linkDomains as string[], but
-  // an untyped JavaScript caller can still send anything, and a straight
-  // `as? [String]` cast drops the WHOLE declaration over one bad entry. Keeping
-  // the strings matches what the Android bridge does with the same payload.
-  private static func stringArray(_ value: Any?) -> [String]? {
-    guard let items = value as? [Any] else { return nil }
-    return items.compactMap { $0 as? String }
-  }
-
-  private func rejectWithError(
-    code: String,
-    message: String,
-    rejecter reject: RCTPromiseRejectBlock
-  ) {
-    reject(code, message, nil)
-  }
-
-  func rejectWithWarpLinkError(
-    _ error: WarpLinkError,
-    rejecter reject: RCTPromiseRejectBlock
-  ) {
-    reject(
-      Self.errorCode(for: error),
-      error.errorDescription ?? String(describing: error),
-      error as NSError
-    )
-  }
-
-  private static func errorCode(for error: WarpLinkError) -> String {
-    switch error {
-    case .notConfigured: return "E_NOT_CONFIGURED"
-    case .invalidApiKeyFormat: return "E_INVALID_API_KEY_FORMAT"
-    case .invalidApiKey: return "E_INVALID_API_KEY"
-    case .networkError: return "E_NETWORK_ERROR"
-    case .serverError: return "E_SERVER_ERROR"
-    case .invalidURL: return "E_INVALID_URL"
-    case .linkNotFound: return "E_LINK_NOT_FOUND"
-    case .passwordRequired: return "E_PASSWORD_REQUIRED"
-    case .decodingError: return "E_DECODING_ERROR"
     }
   }
 }

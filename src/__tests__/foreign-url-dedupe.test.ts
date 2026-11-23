@@ -35,6 +35,8 @@ jest.mock('react-native', () => ({
 import { ErrorCodes, type DeepLinkEvent } from '../types';
 import { held } from '../../test-utils/held';
 import { classifyLikeNative } from '../../test-utils/classify-like-native';
+import { FAKE_CLOCK_ONLY, settleEventLoop, waitFor } from '../../test-utils/wait-for';
+import { CLASSIFY_CEILING_MS } from '../automatic/waits';
 
 /**
  * A foreign url must not stamp the dedupe window (warplink-0csz).
@@ -95,11 +97,8 @@ function emitNativeEvent(data: Record<string, unknown>): void {
   if (handler) handler(data);
 }
 
-const flushPromises = async (turns = 8): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
+/** The url has been handed to the native module to classify. */
+const classificationStarted = (url: string) => waitFor(() => expect(mockIsWarpLinkUrl).toHaveBeenCalledWith(url));
 
 /** Any rejection the native module produces, by code. */
 function nativeError(code: string, message: string): Error & { code: string } {
@@ -144,9 +143,7 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
   });
 
   afterEach(() => {
-    // Scoped here rather than per test: only the wedged-classification test
-    // fakes timers, and every other test needs real ones for flushPromises'
-    // setImmediate loop.
+    // Scoped here rather than per test: only the wedged-classification tests fake timers.
     jest.useRealTimers();
     jest.restoreAllMocks();
   });
@@ -166,17 +163,18 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     nowSpy.mockReturnValue(1200);
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await classificationStarted(FOREIGN);
 
     // 500ms after the FIRST tap of A, well inside the 1500ms window that tap
     // stamped. The foreign url in between must not have reset it.
     nowSpy.mockReturnValue(1500);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    // Absence check: the re-tap is a duplicate and never reaches the native module, so nothing announces it.
+    await settleEventLoop();
 
     expect(resolvesOf(URL_A)).toBe(1);
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
@@ -212,21 +210,23 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(mockHandleDeepLink).toHaveBeenCalledWith(URL_A));
 
     nowSpy.mockReturnValue(1200);
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await classificationStarted(FOREIGN);
 
     // The re-tap lands while the foreign url is still unclassified.
     nowSpy.mockReturnValue(1300);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
 
     classifyingForeign.resolve(false);
-    await flushPromises();
+    // The re-tap is classified once the foreign url has been decided, which is the third question asked.
+    await waitFor(() => expect(mockIsWarpLinkUrl).toHaveBeenCalledTimes(3));
     inFlightA.resolve(LINK_A);
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
+    // Absence check: the re-tap is a duplicate and never reaches the native module, so nothing announces it.
+    await settleEventLoop();
 
     expect(resolvesOf(URL_A)).toBe(1);
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
@@ -261,28 +261,29 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     nowSpy.mockReturnValue(1100);
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await classificationStarted(FOREIGN);
 
     // B is queued behind the unclassified foreign url; releasing it lets both
     // through, in arrival order, and B ends up owning the window.
     nowSpy.mockReturnValue(1200);
     emitNativeEvent({ url: URL_B });
     classifyingForeign.resolve(false);
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(2));
 
     // Inside B's own window, so a repeat of B is still suppressed.
     nowSpy.mockReturnValue(1300);
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    // Absence check: the repeat is a duplicate and never reaches the native module, so nothing announces it.
+    await settleEventLoop();
 
     // A is no longer the window's url, so this is a fresh navigation.
     nowSpy.mockReturnValue(1700);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(3));
 
     expect(resolvesOf(URL_B)).toBe(1);
     expect(resolvesOf(URL_A)).toBe(2);
@@ -313,15 +314,15 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     nowSpy.mockReturnValue(1200);
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(2));
 
     nowSpy.mockReturnValue(1500);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(3));
 
     expect(resolvesOf(URL_A)).toBe(2);
     expect(received(events)).toEqual([
@@ -364,22 +365,24 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     nowSpy.mockReturnValue(1100);
     emitNativeEvent({ url: FOREIGN });
     nowSpy.mockReturnValue(1200);
     emitNativeEvent({ url: FOREIGN_2 });
-    await flushPromises();
+    await classificationStarted(FOREIGN);
 
     for (const index of order as number[]) {
       classifying.get(foreigns[index] as string)?.resolve(false);
-      await flushPromises();
+      // Each answer is taken before the next is given. No call leaves the SDK for a foreign url.
+      await settleEventLoop();
     }
 
     nowSpy.mockReturnValue(1500);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    // Absence check: the re-tap is a duplicate and never reaches the native module, so nothing announces it.
+    await settleEventLoop();
 
     expect(resolvesOf(URL_A)).toBe(1);
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
@@ -405,7 +408,9 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     });
 
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await classificationStarted(FOREIGN);
+    // Absence check: a foreign url is never resolved, so nothing announces that no resolve started.
+    await settleEventLoop();
 
     expect(mockIsWarpLinkUrl).toHaveBeenCalledWith(FOREIGN);
     expect(mockHandleDeepLink).not.toHaveBeenCalled();
@@ -415,7 +420,7 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     // first arrival: it resolves, and nothing silences it.
     nowSpy.mockReturnValue(1100);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     expect(resolvesOf(URL_A)).toBe(1);
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
@@ -440,15 +445,15 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
 
     nowSpy.mockReturnValue(1100);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     nowSpy.mockReturnValue(1200);
     emitNativeEvent({ url: FOREIGN });
-    await flushPromises();
+    await classificationStarted(FOREIGN);
 
     nowSpy.mockReturnValue(1600);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(2));
 
     expect(resolvesOf(URL_A)).toBe(2);
     expect(received(events)).toEqual([
@@ -475,7 +480,9 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     emitNativeEvent({ url: URL_A });
     nowSpy.mockReturnValue(1010);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
+    // Absence check: the second tap is a duplicate and never reaches the native module, so nothing announces it.
+    await settleEventLoop();
 
     expect(resolvesOf(URL_A)).toBe(1);
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
@@ -508,15 +515,16 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     emitNativeEvent({ url: URL_A });
     nowSpy.mockReturnValue(1010);
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await classificationStarted(URL_A);
 
     classifyingA.resolve(true);
-    await flushPromises();
+    await waitFor(() => expect(events.length).toBeGreaterThan(0));
 
     // B arrived last, so B owns the window: a repeat of B is a duplicate.
     nowSpy.mockReturnValue(1100);
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    // Absence check: the repeat is a duplicate and never reaches the native module, so nothing announces it.
+    await settleEventLoop();
 
     expect(resolvesOf(URL_A)).toBe(1);
     expect(resolvesOf(URL_B)).toBe(1);
@@ -545,7 +553,7 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(mockHandleDeepLink).toHaveBeenCalledWith(URL_A));
 
     // The manual caller still gets the native module's own refusal.
     await expect(WarpLink.handleDeepLink(FOREIGN)).rejects.toMatchObject({
@@ -554,7 +562,9 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     });
 
     inFlightA.resolve(LINK_A);
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
+    // Absence check: no cancellation may follow the link, and nothing announces one that does not.
+    await settleEventLoop();
 
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
   });
@@ -590,18 +600,19 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
     });
 
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(events).toHaveLength(1));
 
     // The re-tap ARRIVES 300ms later, well inside the 1500ms window.
     nowSpy.mockReturnValue(1300);
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await waitFor(() => expect(asked).toBe(2));
 
     // The native module answers 1600ms after that, so the clock is now past
     // the window the first tap stamped.
     nowSpy.mockReturnValue(2900);
     classifyingRetap.resolve(true);
-    await flushPromises();
+    // Absence check: the re-tap is a duplicate and never reaches the native module, so nothing announces it.
+    await settleEventLoop();
 
     expect(resolvesOf(URL_A)).toBe(1);
     expect(received(events)).toEqual([`link:${LINK_A.linkId}`]);
@@ -630,14 +641,6 @@ describe('a foreign url does not stamp the dedupe window (warplink-0csz)', () =>
  * question nothing can answer slowly.
  */
 describe('an unanswered link check cannot wedge the arrival queue (warplink-0csz)', () => {
-  /**
-   * Mirrors `CLASSIFY_CEILING_MS` in `src/automatic/waits.ts`, which is module
-   * private. Same arrangement as the 15_000 the warplink-17r7 ceiling tests
-   * carry for `SUPERSEDE_WAIT_CEILING_MS`: a constant exported only for a test
-   * to read would be a worse trade than one line kept in step.
-   */
-  const CLASSIFY_CEILING_MS = 2_000;
-
   beforeEach(() => {
     jest.resetAllMocks();
     mockIsAttributionComplete.mockResolvedValue(true);
@@ -663,7 +666,7 @@ describe('an unanswered link check cannot wedge the arrival queue (warplink-0csz
   });
 
   it('admits the wedged url as a link past the ceiling, and everything queued behind it', async () => {
-    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    jest.useFakeTimers({ doNotFake: FAKE_CLOCK_ONLY });
     const events: DeepLinkEvent[] = [];
     const nativeConfigure = held<undefined>();
     const wedged = held<boolean>();
@@ -684,28 +687,28 @@ describe('an unanswered link check cannot wedge the arrival queue (warplink-0csz
 
     // The warm listener is registered synchronously, so this url arrives while
     // the native side is still configuring, and takes the head of the queue.
-    await flushPromises();
+    await waitFor(() => expect(mockConfigure).toHaveBeenCalledTimes(1));
     emitNativeEvent({ url: URL_B });
-    await flushPromises();
+    await classificationStarted(URL_B);
 
     // The launch link is queued behind it, and a later warm url behind that.
     nativeConfigure.resolve(undefined);
-    await flushPromises();
+    await waitFor(() => expect(mockGetInitialURL).toHaveBeenCalledTimes(1));
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    // Absence check: everything is queued behind the wedged check, and nothing announces a resolve that does not start.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).not.toHaveBeenCalled();
     expect(configured).toBe(false);
 
     // Just short of the ceiling, nothing has been given up on yet.
-    jest.advanceTimersByTime(CLASSIFY_CEILING_MS - 1);
-    await flushPromises();
+    await jest.advanceTimersByTimeAsync(CLASSIFY_CEILING_MS - 1);
     expect(mockHandleDeepLink).not.toHaveBeenCalled();
     expect(configured).toBe(false);
 
-    jest.advanceTimersByTime(1);
-    await flushPromises();
+    await jest.advanceTimersByTimeAsync(1);
     await configuring;
+    await waitFor(() => expect(resolvesOf(URL_A)).toBe(1));
 
     // Failed open: the url nobody would classify is treated as a link.
     expect(resolvesOf(URL_B)).toBe(1);
@@ -725,9 +728,10 @@ describe('an unanswered link check cannot wedge the arrival queue (warplink-0csz
    * queue still drains, in a time the reader can compute.
    */
   it('costs one ceiling per wedged check, so three of them delay the next by three', async () => {
-    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    jest.useFakeTimers({ doNotFake: FAKE_CLOCK_ONLY });
+    const firstWedged = 'https://aplnk.to/rn0csz-w1';
     const wedgedUrls = [
-      'https://aplnk.to/rn0csz-w1',
+      firstWedged,
       'https://aplnk.to/rn0csz-w2',
       'https://aplnk.to/rn0csz-w3',
     ];
@@ -748,16 +752,19 @@ describe('an unanswered link check cannot wedge the arrival queue (warplink-0csz
       emitNativeEvent({ url });
     }
     emitNativeEvent({ url: URL_A });
-    await flushPromises();
+    await classificationStarted(firstWedged);
+    // Absence check: everything is queued behind the first wedged check, and nothing announces a resolve that does not start.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).not.toHaveBeenCalled();
 
     // Each ceiling only starts once the arrival ahead of it has been given up
     // on, so the clock has to be advanced one ceiling at a time.
     for (const [index, url] of wedgedUrls.entries()) {
-      jest.advanceTimersByTime(CLASSIFY_CEILING_MS);
-      await flushPromises();
-      expect(resolvesOf(url)).toBe(1);
+      await jest.advanceTimersByTimeAsync(CLASSIFY_CEILING_MS);
+      await waitFor(() => expect(resolvesOf(url)).toBe(1));
+      // Absence check: the arrival behind the wedged ones has not been admitted yet, and nothing announces that.
+      await settleEventLoop();
       // The arrival behind all three waits for the last of them, and no longer.
       expect(resolvesOf(URL_A)).toBe(index === wedgedUrls.length - 1 ? 1 : 0);
     }

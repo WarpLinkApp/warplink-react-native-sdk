@@ -123,6 +123,19 @@ describe('additive evidence fields', () => {
     expect(link).toMatchObject({ matchMethod: method, evidenceClass: cls });
   });
 
+  it('WL-S46 the server name referrer reads as android_referrer', async () => {
+    mockHandleDeepLink.mockResolvedValue(
+      nativeMatch({ matchMethod: 'referrer', evidenceClass: 'exact' })
+    );
+
+    const link = await WarpLink.handleDeepLink(URL);
+
+    expect(link).toMatchObject({
+      matchMethod: 'android_referrer',
+      evidenceClass: 'exact',
+    });
+  });
+
   it('WL-S46 a missing class is never upgraded to exact', async () => {
     mockHandleDeepLink.mockResolvedValue(
       nativeMatch({ evidenceClass: undefined, matchMethod: 'link_open' })

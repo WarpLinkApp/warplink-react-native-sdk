@@ -35,6 +35,7 @@ jest.mock('react-native', () => ({
 import { ErrorCodes, type DeepLinkEvent } from '../types';
 import { held } from '../../test-utils/held';
 import { classifyLikeNative } from '../../test-utils/classify-like-native';
+import { settleEventLoop, waitFor } from '../../test-utils/wait-for';
 
 /**
  * With an explicit onDeepLink() subscriber wired, dispatchNativeEvent still
@@ -72,12 +73,6 @@ function emitNativeEvent(data: Record<string, unknown>): void {
   const handler = mockEmitterListeners.get('onWarpLinkDeepLink');
   if (handler) handler(data);
 }
-
-const flushPromises = async (turns = 8): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
 
 /** The rejection the native module produces when a newer tap cancels an older one. */
 function cancellation(message: string): Error & { code: string } {
@@ -137,11 +132,13 @@ describe('an explicit subscriber and a repeat inside the dedupe window (warplink
     WarpLink.onDeepLink((event) => explicit.push(event));
 
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(onLinkEvents).toHaveLength(1));
 
     nowSpy.mockReturnValue(10300);
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(explicit).toHaveLength(2));
+    // Absence check: the repeat's answer must not reach onLink, and nothing announces a delivery that does not happen.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(2);
     expect(received(onLinkEvents)).toEqual([`link:${LINK.linkId}`]);
@@ -173,7 +170,12 @@ describe('an explicit subscriber and a repeat inside the dedupe window (warplink
 
     emitNativeEvent({ url: URL });
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => {
+      expect(explicit).toHaveLength(2);
+      expect(onLinkEvents).toHaveLength(1);
+    });
+    // Absence check: no cancellation or second link may follow, and nothing announces one that does not.
+    await settleEventLoop();
 
     expect(received(onLinkEvents)).toEqual([`link:${LINK.linkId}`]);
     expect(explicit).toHaveLength(2);
@@ -205,17 +207,17 @@ describe('an explicit subscriber and a repeat inside the dedupe window (warplink
 
     emitNativeEvent({ url: URL });
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(calls).toBe(2));
     expect(onLinkEvents).toHaveLength(0);
 
     // The second (repeat) claim's own resolve answers first.
     open.get(`${URL}#2`)?.resolve(LINK);
-    await flushPromises();
-    expect(received(onLinkEvents)).toEqual([`link:${LINK.linkId}`]);
+    await waitFor(() => expect(received(onLinkEvents)).toEqual([`link:${LINK.linkId}`]));
 
     // The first claim's cancellation, arriving after, must stay silent.
     open.get(`${URL}#1`)?.reject(cancellation('Network request failed: Canceled'));
-    await flushPromises();
+    // Absence check: a silenced cancellation delivers nothing, so no event marks that it was handled.
+    await settleEventLoop();
     expect(received(onLinkEvents)).toEqual([`link:${LINK.linkId}`]);
   });
 
@@ -230,6 +232,7 @@ describe('an explicit subscriber and a repeat inside the dedupe window (warplink
    */
   it('does not clear the dedupe stamp when a forced repeat it does not own fails', async () => {
     const onLinkEvents: DeepLinkEvent[] = [];
+    const explicit: DeepLinkEvent[] = [];
     const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1000);
     mockHandleDeepLink
       .mockResolvedValueOnce(LINK)
@@ -240,25 +243,27 @@ describe('an explicit subscriber and a repeat inside the dedupe window (warplink
       apiKey: VALID_LIVE_KEY,
       onLink: (event) => onLinkEvents.push(event),
     });
-    WarpLink.onDeepLink(() => undefined);
+    WarpLink.onDeepLink((event) => explicit.push(event));
 
     // The owner: fresh, settles first, and sets the stamp.
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(explicit).toHaveLength(1));
 
     // A forced repeat, still inside the window, whose own resolve fails. It
     // does not own the stamp (the owner does), so its failure must not clear
     // it.
     nowSpy.mockReturnValue(1300);
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(explicit).toHaveLength(2));
 
     // A third arrival, still inside the owner's original window. If the
     // repeat's failure had cleared the stamp, this would read as fresh and
     // deliver OTHER_LINK to onLink a second time.
     nowSpy.mockReturnValue(1400);
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(explicit).toHaveLength(3));
+    // Absence check: the third answer must not reach onLink, and nothing announces a delivery that does not happen.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(3);
     expect(received(onLinkEvents)).toEqual([`link:${LINK.linkId}`]);
@@ -294,19 +299,19 @@ describe('an explicit subscriber and a repeat inside the dedupe window (warplink
     emitNativeEvent({ url: URL });
     emitNativeEvent({ url: URL });
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(open).toHaveLength(3));
     expect(onLinkEvents).toHaveLength(0);
 
     // The newest tap answers first, and is a link: it supersedes both older
     // ones.
     open[2]?.resolve(OTHER_LINK);
-    await flushPromises();
-    expect(received(onLinkEvents)).toEqual([`link:${OTHER_LINK.linkId}`]);
+    await waitFor(() => expect(received(onLinkEvents)).toEqual([`link:${OTHER_LINK.linkId}`]));
 
     // Both older cancellations, arriving after, must stay silent.
     open[1]?.reject(cancellation('Network request failed: Canceled'));
     open[0]?.reject(cancellation('Network request failed: Canceled'));
-    await flushPromises();
+    // Absence check: silenced cancellations deliver nothing, so no event marks that they were handled.
+    await settleEventLoop();
 
     expect(received(onLinkEvents)).toEqual([`link:${OTHER_LINK.linkId}`]);
   });

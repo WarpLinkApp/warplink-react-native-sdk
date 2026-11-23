@@ -1,4 +1,5 @@
 import type { AttributionEvidence } from './referral/referral-types';
+import type { TetherReadMode } from './tether/tether-types';
 
 export const ErrorCodes = {
   E_NOT_CONFIGURED: 'E_NOT_CONFIGURED',
@@ -104,6 +105,16 @@ export interface WarpLinkConfig {
    * @default true
    */
   automaticDeferredDeepLinks?: boolean;
+  /**
+   * How the SDK gets a Tether code from the clipboard: `'pasteButton'`
+   * (default, no paste alert), `'automatic'` (iOS may show its paste alert
+   * once, at first open) or `'onCall'` (only when you call
+   * `WarpLink.readTether()`). Android reads nothing in any mode. A value that
+   * is not a mode reads as `'pasteButton'`.
+   *
+   * @default 'pasteButton'
+   */
+  tetherReadMode?: TetherReadMode;
 }
 
 export interface WarpLinkDeepLink extends AttributionEvidence {

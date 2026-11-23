@@ -34,6 +34,7 @@ jest.mock('react-native', () => ({
 
 import { ErrorCodes, type DeepLinkEvent } from '../types';
 import { classifyLikeNative } from '../../test-utils/classify-like-native';
+import { settleEventLoop, waitFor } from '../../test-utils/wait-for';
 
 /**
  * The TypeScript layer keeps its emitter subscription and its dedupe window in
@@ -62,12 +63,6 @@ function emitNativeEvent(data: Record<string, unknown>): void {
   const handler = mockEmitterListeners.get('onWarpLinkDeepLink');
   if (handler) handler(data);
 }
-
-const flushPromises = async (turns = 8): Promise<void> => {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-};
 
 /** The rejection the native module produces when a newer tap cancels an older one. */
 function cancellation(message: string): Error & { code: string } {
@@ -117,7 +112,9 @@ describe('a superseded tap (warplink-8jih)', () => {
 
     emitNativeEvent({ url: URL });
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(mockHandleDeepLink).toHaveBeenCalledTimes(1));
+    // Absence check: the duplicate is dropped before the native module, so nothing announces a second call.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(1);
   });
@@ -133,7 +130,9 @@ describe('a superseded tap (warplink-8jih)', () => {
 
     emitNativeEvent({ url: URL });
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(events.length).toBeGreaterThan(0));
+    // Absence check: no failure or second delivery may follow the link, and nothing announces one that does not.
+    await settleEventLoop();
 
     expect(events.filter((e) => e.error)).toHaveLength(0);
     expect(events.filter((e) => e.deepLink)).toHaveLength(1);
@@ -166,7 +165,9 @@ describe('a superseded tap (warplink-8jih)', () => {
     // 2.0 s later: past DEDUPE_WINDOW_MS, so this is a new navigation.
     now.mockReturnValue(1_002_000);
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(events.length).toBeGreaterThan(0));
+    // Absence check: no phantom failure may follow the answer, and nothing announces one that does not.
+    await settleEventLoop();
 
     now.mockRestore();
 
@@ -202,7 +203,9 @@ describe('a superseded tap (warplink-8jih)', () => {
 
     emitNativeEvent({ url: URL });
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(events.length).toBeGreaterThan(0));
+    // Absence check: the cancellation must never reach the automatic sink, and nothing announces that it did not.
+    await settleEventLoop();
 
     expect(events.filter((e) => e.error)).toHaveLength(0);
     expect(events.filter((e) => e.deepLink)).toHaveLength(1);
@@ -228,7 +231,9 @@ describe('a superseded tap (warplink-8jih)', () => {
 
     emitNativeEvent({ url: URL });
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(explicit).toHaveLength(2));
+    // Absence check: no third event may follow, and nothing announces one that does not.
+    await settleEventLoop();
 
     expect(mockHandleDeepLink).toHaveBeenCalledTimes(2);
     expect(explicit).toHaveLength(2);
@@ -254,7 +259,9 @@ describe('a superseded tap (warplink-8jih)', () => {
     });
 
     emitNativeEvent({ url: URL });
-    await flushPromises();
+    await waitFor(() => expect(events.length).toBeGreaterThan(0));
+    // Absence check: the failure must arrive once, and nothing announces a repeat.
+    await settleEventLoop();
 
     const failures = events.filter((e) => e.error);
     expect(failures).toHaveLength(1);
